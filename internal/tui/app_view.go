@@ -107,9 +107,6 @@ func (m *AppModel) refreshView() {
 		}
 		parts = append(parts, m.renderConversationEntryCached(i, contentWidth))
 	}
-	if len(parts) == 0 {
-		parts = append(parts, m.renderEmptyState(contentWidth, m.viewport.Height))
-	}
 	m.viewText = strings.Join(parts, "\n\n")
 	m.viewport.SetContent(m.viewText)
 	if stickToBottom {
@@ -118,17 +115,9 @@ func (m *AppModel) refreshView() {
 	}
 }
 
-// renderEmptyState 渲染首次进入 TUI 时的欢迎页。
-func (m *AppModel) renderEmptyState(width int, height int) string {
-	padFrame := func(content string) string {
-		contentHeight := renderedLineCount(content)
-		top := 0
-		if height > contentHeight {
-			top = max(0, (height-contentHeight)/3)
-		}
-		return strings.Repeat("\n", top) + content + strings.Repeat("\n", max(0, height-top-contentHeight))
-	}
-
+// renderIntroEntry 渲染 session 开头的固定说明；它作为历史条目参与滚动。
+func (m *AppModel) renderIntroEntry(width int) string {
+	height := max(1, m.viewport.Height)
 	snapshot := m.snapshot()
 	meta := snapshot.Runtime
 	model := truncateMiddle(fallback(m.modelName, "-"), 34)
@@ -181,7 +170,7 @@ func (m *AppModel) renderEmptyState(width int, height int) string {
 			BorderForeground(colorGray).
 			Padding(1, 2).
 			Render(body)
-		return padFrame(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(card))
+		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(card)
 	}
 
 	if width >= 44 && height >= 10 {
@@ -195,7 +184,7 @@ func (m *AppModel) renderEmptyState(width int, height int) string {
 			"",
 			info,
 		)
-		return padFrame(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content))
+		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content)
 	}
 
 	if width >= 12 && height >= 4 {
@@ -203,7 +192,7 @@ func (m *AppModel) renderEmptyState(width int, height int) string {
 			renderWallePixelIconCompact(),
 			lipgloss.NewStyle().Foreground(colorGreen).Render("connected"),
 		)
-		return padFrame(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content))
+		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content)
 	}
 
 	lines := []string{
@@ -213,7 +202,7 @@ func (m *AppModel) renderEmptyState(width int, height int) string {
 	for i, line := range lines {
 		lines[i] = truncateMiddle(line, max(1, width))
 	}
-	return padFrame(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
 }
 
 func statusRow(label string, value string) string {
@@ -342,6 +331,9 @@ func slashHintMatches(input string) []slashCommandHint {
 
 func (m *AppModel) renderConversationEntryCached(index int, width int) string {
 	entry := m.entries[index]
+	if entry.Role == roleIntro {
+		return m.renderIntroEntry(width)
+	}
 	frame := -1
 	if entry.Role == roleHint && entry.ToolState == "running" {
 		frame = m.spinnerFrame
@@ -371,6 +363,8 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 	case roleAssistant:
 		content := strings.TrimRight(renderMarkdownForTerminal(normalizeAssistantContent(entry.Content), true), "\n")
 		return renderIndentedEntry(withEntryTime(entry, wrapVisibleText(content, innerWidth), innerWidth))
+	case roleIntro:
+		return m.renderIntroEntry(width)
 	case roleHint:
 		return renderIndentedEntry(withEntryTime(entry, m.renderToolHintEntry(entry, innerWidth), innerWidth))
 	case roleThinking:
@@ -526,16 +520,10 @@ func stripANSI(text string) string {
 func renderViewportPane(vp viewport.Model, content string) string {
 	width := max(1, vp.Width)
 	height := max(1, vp.Height)
-	var lines []string
 	if vp.TotalLineCount() <= vp.Height {
-		lines = strings.Split(content, "\n")
-		for len(lines) < height {
-			lines = append([]string{""}, lines...)
-		}
-	} else {
-		lines = strings.Split(vp.View(), "\n")
+		return renderFixedLines(strings.Split(content, "\n"), width, height)
 	}
-	return renderFixedLines(lines, width, height)
+	return renderFixedLines(strings.Split(vp.View(), "\n"), width, height)
 }
 
 func renderFixedLines(lines []string, width int, height int) string {

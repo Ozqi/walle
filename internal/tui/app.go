@@ -21,6 +21,7 @@ const (
 	roleUser         = "user"
 	roleAssistant    = "assistant"
 	roleSystem       = "system"
+	roleIntro        = "intro"
 	roleHint         = "hint"
 	roleThinking     = "thinking"
 	defaultTUIWidth  = 100
@@ -247,6 +248,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 		ctx:              ctx,
 		viewport:         vp,
 		input:            input,
+		entries:          []conversationEntry{{Role: roleIntro}},
 		currentAssistant: -1,
 		currentStatus:    "idle",
 		autoScroll:       true,
@@ -337,7 +339,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case agentd.ProcessEventThinking:
 			return m.Update(assistantThinkingMsg{token: event.Text})
 		case agentd.ProcessEventTool:
-			return m.Update(toolEventMsg{event: toolevent.ToolEvent{Kind: event.Kind, Name: event.Name, Args: event.Args, Text: event.Text, Result: event.Result, Error: event.Error}})
+			return m.Update(toolEventMsg{event: toolevent.ToolEvent{Kind: event.Kind, Name: event.Name, Args: event.Args, Text: event.Text, Result: event.Result, Error: event.Error, Concurrent: event.Concurrent}})
 		case agentd.ProcessEventSystem:
 			m.busy = false
 			m.currentStatus = "idle"

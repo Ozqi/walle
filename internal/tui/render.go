@@ -56,21 +56,12 @@ func isEmptyInputPromptLine(line string) bool {
 // 参数：snapshot 为远端运行快照；modelName 为 attach 时或 model 事件更新的模型名。
 func renderTopStatus(snapshot statusSnapshot, modelName string, width int) string {
 	meta := snapshot.Runtime
+	labelWidth := max(16, width/3)
 	if width < 72 {
-		parts := []string{
-			lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), 22)),
-			renderState(meta.State, meta.Busy),
-		}
-		if meta.Turn > 0 {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("turn %d", meta.Turn)))
-		}
-		if meta.ToolCallsTotal > 0 {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render(fmt.Sprintf("tools %d", meta.ToolCallsTotal)))
-		}
-		return strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
+		labelWidth = 22
 	}
 	parts := []string{
-		lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), max(16, width/3))),
+		lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), labelWidth)),
 		renderState(meta.State, meta.Busy),
 	}
 	if meta.Turn > 0 {
@@ -79,11 +70,22 @@ func renderTopStatus(snapshot statusSnapshot, modelName string, width int) strin
 	if meta.ToolCallsTotal > 0 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render(fmt.Sprintf("tools %d", meta.ToolCallsTotal)))
 	}
-	if meta.LastToolName != "" {
+	if width >= 72 && meta.LastToolName != "" {
 		last := truncateMiddle(fallback(tools.DisplayName(meta.LastToolName), meta.LastToolName), 24)
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("last "+last))
 	}
-	return strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
+	label := strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
+	return renderStatusRule(label, width)
+}
+
+func renderStatusRule(label string, width int) string {
+	width = max(12, width)
+	labelWidth := lipgloss.Width(label)
+	if labelWidth+3 >= width {
+		return label
+	}
+	line := strings.Repeat("─", max(1, width-labelWidth-2)) + " " + label
+	return lipgloss.NewStyle().Foreground(colorGray).Render(line)
 }
 
 // renderInputFooter 渲染输入框下方的低频上下文状态。

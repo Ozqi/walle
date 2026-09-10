@@ -117,6 +117,7 @@ type AppModel struct {
 	lastQuitAt         time.Time
 	autoScroll         bool
 	metaCache          cachedMeta
+	introInfo          introInfo
 	picker             *pickerState
 }
 
@@ -257,7 +258,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 
 // Init 返回 Bubble Tea 启动时需要执行的光标闪烁和异步元信息加载命令。
 func (m *AppModel) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd())
+	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd(), m.loadIntroCmd())
 }
 
 // Update 处理 Bubble Tea 消息并更新 TUI 状态机。
@@ -395,6 +396,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case locationLoadedMsg:
 		m.metaCache = cachedMeta{Workdir: msg.workdir, Git: msg.git, LoadedAt: time.Now()}
+		m.refreshView()
+		return m, nil
+	case introLoadedMsg:
+		m.introInfo = msg.info
 		m.refreshView()
 		return m, nil
 	case remoteSubmitResultMsg:

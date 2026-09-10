@@ -117,121 +117,30 @@ func (m *AppModel) refreshView() {
 
 // renderIntroEntry 渲染 session 开头的固定说明；它作为历史条目参与滚动。
 func (m *AppModel) renderIntroEntry(width int) string {
-	height := max(1, m.viewport.Height)
-	snapshot := m.snapshot()
-	meta := snapshot.Runtime
-	model := truncateMiddle(fallback(m.modelName, "-"), 34)
-	workdir := truncateMiddle(fallback(meta.Workdir, "-"), 34)
-	session := truncateMiddle(fallback(meta.SessionID, "-"), 22)
-	gitLine := "-"
-	if meta.Git.Repo {
-		branch := fallback(meta.Git.Branch, "detached")
-		if meta.Git.Dirty {
-			branch += "*"
+	width = max(24, width)
+	title := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("walle 启动上下文")
+	muted := lipgloss.NewStyle().Foreground(colorMuted)
+	lines := []string{title, muted.Render("预载提示词")}
+	for _, prompt := range fallbackList(m.introInfo.Prompts, []string{"main.md"}) {
+		lines = append(lines, "  • "+lipgloss.NewStyle().Foreground(colorWhite).Render(prompt))
+	}
+	lines = append(lines, "", muted.Render("预载 Skills"))
+	skills := fallbackList(m.introInfo.Skills, []string{"未发现已加载 Skill"})
+	for i, skill := range skills {
+		if i >= maxHintRows {
+			lines = append(lines, muted.Render(fmt.Sprintf("  • ... 还有 %d 个", len(skills)-i)))
+			break
 		}
-		gitPrefix := "git"
-		if meta.Git.Worktree {
-			gitPrefix = "worktree"
-		}
-		gitLine = gitPrefix + " " + branch
-		if meta.Git.Shortstat != "" {
-			gitLine += " · " + meta.Git.Shortstat
-		}
-	}
-
-	stateLine := renderState(fallback(meta.State, "idle"), meta.Busy)
-	statusRows := []string{
-		statusRow("daemon", lipgloss.NewStyle().Foreground(colorGreen).Render("connected")),
-		statusRow("state", stateLine),
-		statusRow("model", lipgloss.NewStyle().Foreground(colorCommand).Render(model)),
-		statusRow("workspace", lipgloss.NewStyle().Foreground(colorWhite).Render(workdir)),
-		statusRow("session", lipgloss.NewStyle().Foreground(colorPurple).Render(session)),
-		statusRow("repo", lipgloss.NewStyle().Foreground(colorBlue).Render(truncateMiddle(gitLine, 34))),
-	}
-
-	if width >= 70 && height >= 14 {
-		cardWidth := min(78, width-8)
-		badge := lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render("CONNECTED")
-		title := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("walle") + lipgloss.NewStyle().Foreground(colorMuted).Render("  daemon attached")
-		info := lipgloss.JoinVertical(lipgloss.Left,
-			badge,
-			title,
-			"",
-			strings.Join(statusRows, "\n"),
-		)
-		body := lipgloss.JoinHorizontal(lipgloss.Top,
-			renderWallePixelIcon(),
-			"   ",
-			info,
-		)
-		card := lipgloss.NewStyle().
-			Width(cardWidth).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorGray).
-			Padding(1, 2).
-			Render(body)
-		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(card)
-	}
-
-	if width >= 44 && height >= 10 {
-		info := lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("walle · daemon connected"),
-			statusRow("model", lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(model, 26))),
-			statusRow("workspace", lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(workdir, 26))),
-		)
-		content := lipgloss.JoinVertical(lipgloss.Center,
-			renderWallePixelIcon(),
-			"",
-			info,
-		)
-		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content)
-	}
-
-	if width >= 12 && height >= 4 {
-		content := lipgloss.JoinVertical(lipgloss.Center,
-			renderWallePixelIconCompact(),
-			lipgloss.NewStyle().Foreground(colorGreen).Render("connected"),
-		)
-		return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(content)
-	}
-
-	lines := []string{
-		lipgloss.NewStyle().Foreground(colorYellow).Render("walle"),
-		lipgloss.NewStyle().Foreground(colorGreen).Render("ok"),
-	}
-	for i, line := range lines {
-		lines[i] = truncateMiddle(line, max(1, width))
+		lines = append(lines, "  • "+wrapVisibleText(skill, max(8, width-4)))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func statusRow(label string, value string) string {
-	return lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("%-9s", label)) + value
-}
-
-func renderWallePixelIcon() string {
-	orange := lipgloss.NewStyle().Foreground(colorOrange)
-	yellow := lipgloss.NewStyle().Foreground(colorYellow)
-	return strings.Join([]string{
-		orange.Render(" ╭───╮ ╭───╮"),
-		orange.Render("╱  ") + yellow.Render("●") + orange.Render(" ╲_╱ ") + yellow.Render("●") + orange.Render("  ╲"),
-		orange.Render("╲____╱ ╲____╱"),
-		orange.Render("     ║╬║"),
-		orange.Render("╭██╮╭─╨─╮╭██╮"),
-		orange.Render("│██├┤") + yellow.Render("▪▦▪") + orange.Render("├┤██│"),
-		orange.Render("╰██╯╰───╯╰██╯"),
-	}, "\n")
-}
-
-func renderWallePixelIconCompact() string {
-	orange := lipgloss.NewStyle().Foreground(colorOrange)
-	yellow := lipgloss.NewStyle().Foreground(colorYellow)
-	return strings.Join([]string{
-		orange.Render("╭─╮ ╭─╮"),
-		orange.Render("│") + yellow.Render("●") + orange.Render("╰─╯") + yellow.Render("●") + orange.Render("│"),
-		orange.Render("  ╰╥╯"),
-		orange.Render("▟█╰") + yellow.Render("▪") + orange.Render("╯█▙"),
-	}, "\n")
+func fallbackList(items []string, fallbackItems []string) []string {
+	if len(items) == 0 {
+		return fallbackItems
+	}
+	return items
 }
 
 // snapshot 汇总输入框附近状态区需要的数据。

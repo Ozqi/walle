@@ -277,9 +277,9 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 	case roleHint:
 		return m.renderToolHintEntry(entry, width)
 	case roleThinking:
-		return renderIndentedEntry(renderThinkingEntry(entry.Content, innerWidth))
+		return renderThinkingEntry(entry.Content, width)
 	case roleSystem:
-		return renderIndentedEntry(renderSystemEntry(entry.SystemTitle, entry.Content, innerWidth))
+		return renderSystemEntry(entry.SystemTitle, entry.Content, width)
 	default:
 		return renderIndentedEntry(wrapVisibleText(strings.TrimSpace(entry.Content), innerWidth))
 	}
@@ -291,17 +291,17 @@ func renderIndentedEntry(rendered string) string {
 
 func renderSystemEntry(title string, content string, width int) string {
 	content = strings.TrimSpace(content)
-	label := "System"
+	label := "recap"
 	if strings.TrimSpace(title) != "" {
-		label = "Command " + truncateMiddle(strings.TrimSpace(title), 40)
+		label = truncateMiddle(strings.TrimSpace(title), 40)
 		content = compactCommandOutput(content, 12)
 	}
+	prefix := lipgloss.NewStyle().Foreground(colorMuted).Render("※ " + label)
 	if content == "" {
-		return lipgloss.NewStyle().Foreground(colorMuted).Render("◆ " + label)
+		return prefix
 	}
-	prefix := lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("◆") + " " + lipgloss.NewStyle().Bold(true).Render(label)
 	body := loggerColorLines(wrapVisibleText(content, max(8, width-4)), colorMuted)
-	return prefix + "\n" + indentLines(body, "  └ ", "    ")
+	return prefix + ": " + indentLines(body, "", "  ")
 }
 
 func compactCommandOutput(content string, maxLines int) string {
@@ -342,9 +342,8 @@ func renderThinkingEntry(content string, width int) string {
 	if content == "" {
 		return ""
 	}
-	label := lipgloss.NewStyle().Foreground(colorMuted).Faint(true).Render("◆ thinking")
 	body := loggerColorLines(wrapVisibleText(content, max(8, width-2)), colorGray)
-	return label + "\n" + indentLines(body, "  └ ", "    ")
+	return lipgloss.NewStyle().Foreground(colorMuted).Render("✶ ") + body
 }
 
 func indentLines(text string, firstPrefix string, nextPrefix string) string {

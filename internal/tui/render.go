@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Ozqi/walle/internal/tools"
@@ -95,18 +96,17 @@ func renderInputFooter(snapshot statusSnapshot, _ string, width int) string {
 	if width < 72 {
 		parts := make([]string, 0, 4)
 		if meta.Workdir != "" && meta.Workdir != "-" {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(meta.Workdir, 24)))
+			parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(homePath(meta.Workdir), 24)))
 		}
 		if meta.Git.Repo {
 			branch := truncateMiddle(fallback(meta.Git.Branch, "detached"), 12)
 			if meta.Git.Dirty {
-				branch += "*"
+				branch += " *"
 			}
 			if meta.Git.Worktree {
-				parts = append(parts, lipgloss.NewStyle().Foreground(colorGreen).Render("worktree "+branch))
-			} else {
-				parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render("git "+branch))
+				branch = "worktree " + branch
 			}
+			parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 		}
 		if meta.PendingInput {
 			parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
@@ -114,27 +114,21 @@ func renderInputFooter(snapshot statusSnapshot, _ string, width int) string {
 		if meta.ScrollPercent < 100 {
 			parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("scroll %d%%", meta.ScrollPercent)))
 		}
-		return strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
+		return renderFooterParts(parts)
 	}
-	parts := make([]string, 0, 8)
+	parts := make([]string, 0, 6)
 	if meta.Workdir != "" && meta.Workdir != "-" {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(meta.Workdir, 36)))
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(homePath(meta.Workdir), 36)))
 	}
 	if meta.Git.Repo {
 		branch := truncateMiddle(fallback(meta.Git.Branch, "detached"), 18)
-		prefix := "git "
-		color := colorBlue
-		if meta.Git.Worktree {
-			prefix = "worktree "
-			color = colorGreen
-		}
 		if meta.Git.Dirty {
-			branch += "*"
+			branch += " *"
 		}
-		parts = append(parts, lipgloss.NewStyle().Foreground(color).Render(prefix+branch))
-		if meta.Git.Shortstat != "" {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorError).Render("diff "+truncateMiddle(meta.Git.Shortstat, 20)))
+		if meta.Git.Worktree {
+			branch = "worktree " + branch
 		}
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
@@ -142,5 +136,24 @@ func renderInputFooter(snapshot statusSnapshot, _ string, width int) string {
 	if meta.ScrollPercent < 100 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("scroll %d%%", meta.ScrollPercent)))
 	}
-	return strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
+	return renderFooterParts(parts)
+}
+
+func renderFooterParts(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	separator := lipgloss.NewStyle().Faint(true).Render(" │ ")
+	return "  " + strings.Join(parts, separator)
+}
+
+func homePath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || !strings.HasPrefix(path, home) {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	return "~" + strings.TrimPrefix(path, home)
 }

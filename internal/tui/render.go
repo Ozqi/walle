@@ -6,7 +6,6 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/Ozqi/walle/internal/tools"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -55,22 +54,13 @@ func isEmptyInputPromptLine(line string) bool {
 	return plain == "" || plain == ">" || plain == "❯"
 }
 
-// renderTopStatus 渲染输入框上方的状态分隔线；详细上下文放在 footer，贴近 Claude Code 布局。
+// renderTopStatus 渲染输入框上方的会话分隔线；运行细节放进正文事件和 footer，贴近 Claude Code 布局。
 func renderTopStatus(snapshot statusSnapshot, width int) string {
-	meta := snapshot.Runtime
-	parts := []string{renderState(meta.State, meta.Busy)}
-	if meta.Turn > 0 {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("turn %d", meta.Turn)))
+	label := strings.TrimSpace(snapshot.Runtime.SessionID)
+	if label == "" {
+		label = snapshot.Runtime.State
 	}
-	if meta.ToolCallsTotal > 0 {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render(fmt.Sprintf("tools %d", meta.ToolCallsTotal)))
-	}
-	if width >= 72 && meta.LastToolName != "" {
-		last := truncateMiddle(fallback(tools.DisplayName(meta.LastToolName), meta.LastToolName), 24)
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("last "+last))
-	}
-	label := strings.Join(parts, lipgloss.NewStyle().Faint(true).Render(" · "))
-	return renderStatusRule(label, width)
+	return renderStatusRule(truncateMiddle(label, 32), width)
 }
 
 func renderStatusRule(label string, width int) string {

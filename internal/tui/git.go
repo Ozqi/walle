@@ -41,7 +41,7 @@ func isLinkedWorktree(gitDir string, commonDir string) bool {
 }
 
 func gitOutput(dir string, args ...string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir

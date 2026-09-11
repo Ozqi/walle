@@ -275,7 +275,7 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 	case roleIntro:
 		return m.renderIntroEntry(width)
 	case roleHint:
-		return renderIndentedEntry(m.renderToolHintEntry(entry, innerWidth))
+		return m.renderToolHintEntry(entry, width)
 	case roleThinking:
 		return renderIndentedEntry(renderThinkingEntry(entry.Content, innerWidth))
 	case roleSystem:

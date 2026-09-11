@@ -235,27 +235,21 @@ func compactOutputLines(lines []string, limit int) string {
 }
 
 func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) string {
-	stateIcon := "▮"
+	stateIcon := "⏺"
 	stateColor := colorBlue
-	switch entry.ToolState {
-	case "running":
-		stateIcon = spinnerFrames[m.spinnerFrame%len(spinnerFrames)]
-		stateColor = colorBlue
-	case "error":
-		stateIcon = "▮"
+	if entry.ToolState == "error" {
+		stateIcon = "✘"
 		stateColor = colorError
 	}
 
 	name := fallback(entry.ToolName, "tool")
 	intent := strings.TrimSpace(entry.ToolIntent)
 	args := strings.TrimSpace(entry.ToolArgs)
-	if entry.ToolState != "running" {
-		stateIcon = "▮"
-	}
-	header := lipgloss.NewStyle().Foreground(stateColor).Bold(true).Render(stateIcon) + " " + lipgloss.NewStyle().Foreground(stateColor).Render(name)
+	title := name
 	if intent != "" {
-		header += lipgloss.NewStyle().Foreground(colorMuted).Render(" · " + intent)
+		title = intent
 	}
+	header := lipgloss.NewStyle().Foreground(stateColor).Bold(true).Render(stateIcon) + " " + lipgloss.NewStyle().Foreground(colorWhite).Render(title)
 	if args != "" {
 		header += " " + logger.Gray(args)
 	}
@@ -264,7 +258,7 @@ func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) strin
 	if output == "" {
 		return header
 	}
-	lineWidth := max(8, width-4)
+	lineWidth := max(8, width-6)
 	lines := wrapVisibleText(compactToolOutputForWidth(output, lineWidth), lineWidth)
 	if entry.ToolState == "error" {
 		lines = loggerColorLines(lines, colorError)
@@ -273,7 +267,7 @@ func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) strin
 	} else {
 		lines = loggerColorLines(lines, colorResult)
 	}
-	return header + "\n" + indentLines(lines, "  └ ", "    ")
+	return header + "\n" + indentLines(lines, "  ⎿  ", "     ")
 }
 
 func colorEditDiffLines(text string) string {

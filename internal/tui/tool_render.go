@@ -102,7 +102,10 @@ func formatToolArgsSummary(args string) string {
 	}
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(args), &raw); err != nil {
-		return "[args=" + truncateMiddle(args, 180) + "]"
+		return "(" + truncateMiddle(args, 180) + ")"
+	}
+	if value := firstToolArg(raw, "file_path", "path", "command", "pattern"); value != "" {
+		return "(" + truncateMiddle(value, 120) + ")"
 	}
 	keys := make([]string, 0, len(raw))
 	for key := range raw {
@@ -113,7 +116,16 @@ func formatToolArgsSummary(args string) string {
 	for _, key := range keys {
 		parts = append(parts, key+"="+truncateMiddle(toolArgValue(raw[key]), 120))
 	}
-	return "[" + strings.Join(parts, ",") + "]"
+	return "(" + strings.Join(parts, ",") + ")"
+}
+
+func firstToolArg(raw map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(toolArgValue(raw[key])); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func toolArgValue(v interface{}) string {

@@ -256,7 +256,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 		ctx:              ctx,
 		viewport:         vp,
 		input:            input,
-		entries:          []conversationEntry{{Role: roleIntro}},
+		entries:          []conversationEntry{},
 		currentAssistant: -1,
 		currentStatus:    "idle",
 		autoScroll:       true,
@@ -265,7 +265,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 
 // Init 返回 Bubble Tea 启动时需要执行的光标闪烁和异步元信息加载命令。
 func (m *AppModel) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd(), m.loadIntroCmd())
+	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd())
 }
 
 // Update 处理 Bubble Tea 消息并更新 TUI 状态机。

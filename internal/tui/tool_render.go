@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Ozqi/walle/internal/logger"
 	"github.com/Ozqi/walle/internal/toolevent"
 	"github.com/Ozqi/walle/internal/tools"
 	"github.com/charmbracelet/lipgloss"
@@ -243,16 +242,12 @@ func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) strin
 	}
 
 	name := fallback(entry.ToolName, "tool")
-	intent := strings.TrimSpace(entry.ToolIntent)
 	args := strings.TrimSpace(entry.ToolArgs)
 	title := name
-	if intent != "" {
-		title = intent
+	if args != "" {
+		title += args
 	}
 	header := lipgloss.NewStyle().Foreground(stateColor).Bold(true).Render(stateIcon) + " " + lipgloss.NewStyle().Foreground(colorWhite).Render(title)
-	if args != "" {
-		header += " " + logger.Gray(args)
-	}
 
 	output := strings.TrimSpace(entry.ToolOutput)
 	if output == "" {

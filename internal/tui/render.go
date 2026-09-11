@@ -32,11 +32,11 @@ func renderMainPane(m *AppModel) string {
 	return mainViewStyle.Width(width).Render(content)
 }
 
-// renderInputBar 渲染单行输入条，避免宽屏下整行边框造成闪烁和视觉压迫。
+// renderInputBar 渲染单行输入条；不铺满背景，保持接近 Claude Code 的轻量命令行形态。
 // 参数：inputView 是 textarea 当前输出；width 是终端主列宽度。
 func renderInputBar(inputView string, width int) string {
 	width = max(12, width)
-	return inputShellStyle.Width(width).Render(compactInputView(inputView))
+	return clipVisibleLine(compactInputView(inputView), width)
 }
 
 func compactInputView(inputView string) string {

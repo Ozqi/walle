@@ -191,7 +191,7 @@ func (m *AppModel) renderSlashHint(width int) string {
 			option := m.picker.Options[index]
 			prefix := "  "
 			if index == m.picker.Cursor {
-				prefix = "> "
+				prefix = "❯ "
 			}
 			lines = append(lines, prefix+option)
 		}

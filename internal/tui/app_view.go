@@ -268,59 +268,25 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 	switch entry.Role {
 	case roleUser:
 		body := compactParagraph(strings.TrimSpace(entry.Content))
-		return withEntryTime(entry, renderUserEntry(body, width), width)
+		return renderUserEntry(body, width)
 	case roleAssistant:
 		content := strings.TrimRight(renderMarkdownForTerminal(normalizeAssistantContent(entry.Content), true), "\n")
-		return renderIndentedEntry(withEntryTime(entry, wrapVisibleText(content, innerWidth), innerWidth))
+		return renderIndentedEntry(wrapVisibleText(content, innerWidth))
 	case roleIntro:
 		return m.renderIntroEntry(width)
 	case roleHint:
-		return renderIndentedEntry(withEntryTime(entry, m.renderToolHintEntry(entry, innerWidth), innerWidth))
+		return renderIndentedEntry(m.renderToolHintEntry(entry, innerWidth))
 	case roleThinking:
-		return renderIndentedEntry(withEntryTime(entry, renderThinkingEntry(entry.Content, innerWidth), innerWidth))
+		return renderIndentedEntry(renderThinkingEntry(entry.Content, innerWidth))
 	case roleSystem:
-		return renderIndentedEntry(withEntryTime(entry, renderSystemEntry(entry.SystemTitle, entry.Content, innerWidth), innerWidth))
+		return renderIndentedEntry(renderSystemEntry(entry.SystemTitle, entry.Content, innerWidth))
 	default:
-		return renderIndentedEntry(withEntryTime(entry, wrapVisibleText(strings.TrimSpace(entry.Content), innerWidth), innerWidth))
+		return renderIndentedEntry(wrapVisibleText(strings.TrimSpace(entry.Content), innerWidth))
 	}
 }
 
 func renderIndentedEntry(rendered string) string {
 	return indentLines(rendered, "  ", "  ")
-}
-
-func withEntryTime(entry conversationEntry, rendered string, width int) string {
-	label := entryTimeLabel(entry.CreatedAt)
-	if label == "" || strings.TrimSpace(stripANSI(rendered)) == "" {
-		return rendered
-	}
-	return appendRightLabel(rendered, label, width)
-}
-
-func entryTimeLabel(createdAt string) string {
-	if createdAt == "" {
-		return ""
-	}
-	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-		return t.Local().Format("15:04:05")
-	}
-	return createdAt
-}
-
-func appendRightLabel(rendered string, label string, width int) string {
-	lines := strings.Split(rendered, "\n")
-	if len(lines) == 0 {
-		return rendered
-	}
-	styled := lipgloss.NewStyle().Foreground(colorMuted).Faint(true).Render(label)
-	width = max(12, width)
-	if lipgloss.Width(lines[0])+lipgloss.Width(styled)+2 <= width {
-		padding := width - lipgloss.Width(lines[0]) - lipgloss.Width(styled)
-		lines[0] += strings.Repeat(" ", max(2, padding)) + styled
-		return strings.Join(lines, "\n")
-	}
-	lines[0] += " " + styled
-	return strings.Join(lines, "\n")
 }
 
 func renderSystemEntry(title string, content string, width int) string {
@@ -355,19 +321,18 @@ func compactCommandOutput(content string, maxLines int) string {
 
 func renderUserEntry(content string, width int) string {
 	content = strings.TrimSpace(content)
-	prefix := "▍ "
-	style := lipgloss.NewStyle().Foreground(colorWhite).Background(colorInputBg)
+	prefix := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("❯ ")
 	if content == "" {
-		return style.Render(prefix)
+		return prefix
 	}
 	lineWidth := max(8, width-lipgloss.Width(prefix))
 	lines := wrapVisibleLines(content, lineWidth)
 	for i, line := range lines {
 		if i == 0 {
-			lines[i] = style.Render(prefix + line)
+			lines[i] = prefix + lipgloss.NewStyle().Foreground(colorWhite).Render(line)
 			continue
 		}
-		lines[i] = style.Render(strings.Repeat(" ", lipgloss.Width(prefix)) + line)
+		lines[i] = strings.Repeat(" ", lipgloss.Width(prefix)) + line
 	}
 	return strings.Join(lines, "\n")
 }

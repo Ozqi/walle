@@ -29,6 +29,7 @@ func renderMainPane(m *AppModel) string {
 	if footer != "" {
 		blocks = append(blocks, footer)
 	}
+	blocks = append(blocks, renderModeHint(width))
 	content := lipgloss.JoinVertical(lipgloss.Left, blocks...)
 	return mainViewStyle.Width(width).Render(content)
 }
@@ -150,6 +151,14 @@ func renderFooterParts(parts []string) string {
 	}
 	separator := lipgloss.NewStyle().Faint(true).Render(" │ ")
 	return "  " + strings.Join(parts, separator)
+}
+
+func renderModeHint(width int) string {
+	hint := "  ⏵⏵ auto mode on (shift+tab to cycle)"
+	if width >= 72 {
+		hint += " · ← for agents"
+	}
+	return lipgloss.NewStyle().Foreground(colorMuted).Render(clipVisibleLine(hint, width))
 }
 
 func homePath(path string) string {

@@ -85,7 +85,7 @@ func (m *AppModel) reservedMainHeight(width int) int {
 	inputHeight := renderedLineCount(renderInputBar(m.input.View(), width))
 	footerHeight := renderedLineCount(renderInputFooter(m.snapshot(), m.sessionID, width))
 	slashHeight := renderedLineCount(m.renderSlashHint(max(12, width-4)))
-	return headerHeight + slashHeight + inputHeight + 1 + footerHeight
+	return headerHeight + slashHeight + inputHeight + 1 + footerHeight + 1
 }
 
 func renderedLineCount(text string) int {

@@ -50,7 +50,7 @@ func compactInputView(inputView string) string {
 
 func isEmptyInputPromptLine(line string) bool {
 	plain := strings.TrimSpace(stripANSI(line))
-	return plain == "" || plain == ">"
+	return plain == "" || plain == ">" || plain == "❯"
 }
 
 // renderTopStatus 渲染输入框上方的高频运行状态。

@@ -234,7 +234,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 	input.Focus()
 	input.ShowLineNumbers = false
 	input.SetHeight(1)
-	input.Prompt = "> "
+	input.Prompt = "❯ "
 	// 输入框使用参考 tmux 对话窗口的低对比深灰条，避免大白块抢视觉焦点。
 	input.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(colorYellow).Background(colorInputBg).Bold(true)
 	input.FocusedStyle.Text = lipgloss.NewStyle().Foreground(colorInputFg).Background(colorInputBg)

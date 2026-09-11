@@ -364,7 +364,7 @@ func renderThinkingEntry(content string, width int) string {
 		return ""
 	}
 	body := loggerColorLines(wrapVisibleText(content, max(8, width-2)), colorGray)
-	return lipgloss.NewStyle().Foreground(colorMuted).Render("✶ ") + body
+	return lipgloss.NewStyle().Foreground(colorMuted).Render("✻ ") + body
 }
 
 func indentLines(text string, firstPrefix string, nextPrefix string) string {

@@ -117,8 +117,6 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
 	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), modelWidth)))
-	parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render("tok --"))
-	parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render("ctx --% used"))
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
 	}

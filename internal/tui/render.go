@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"strings"
 
 	"github.com/Ozqi/walle/internal/tools"
@@ -116,7 +117,7 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		}
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
-	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), modelWidth)))
+	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(displayModelName(modelName), modelWidth)))
 	if meta.ContextWindow > 0 || meta.TotalTokens > 0 || meta.PromptTokens > 0 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render(formatTokenUsage(meta.PromptTokens, meta.TotalTokens)))
 	}
@@ -166,13 +167,28 @@ func renderModeHint(width int) string {
 	return lipgloss.NewStyle().Foreground(colorMuted).Render(clipVisibleLine(hint, width))
 }
 
+func displayModelName(model string) string {
+	if _, name, ok := strings.Cut(strings.TrimSpace(model), "/"); ok && name != "" {
+		return name
+	}
+	return fallback(model, "-")
+}
+
 func homePath(path string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" || !strings.HasPrefix(path, home) {
-		return path
+	homes := []string{}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		homes = append(homes, home)
 	}
-	if path == home {
-		return "~"
+	if current, err := user.Current(); err == nil && current.HomeDir != "" {
+		homes = append(homes, current.HomeDir)
 	}
-	return "~" + strings.TrimPrefix(path, home)
+	for _, home := range homes {
+		if path == home {
+			return "~"
+		}
+		if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+			return "~" + strings.TrimPrefix(path, home)
+		}
+	}
+	return path
 }

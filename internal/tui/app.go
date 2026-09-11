@@ -181,7 +181,7 @@ type remoteStopResultMsg struct {
 	err error
 }
 
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+var spinnerFrames = []string{"✶", "✻", "✢", "·"}
 
 var (
 	colorGreen   = lipgloss.Color("#9ece6a")

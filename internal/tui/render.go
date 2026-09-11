@@ -117,13 +117,16 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		}
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
-	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(displayModelName(modelName), modelWidth)))
+	modelPart := lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(displayModelName(modelName), modelWidth))
 	if meta.ContextWindow > 0 || meta.TotalTokens > 0 || meta.PromptTokens > 0 {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render(formatTokenUsage(meta.PromptTokens, meta.TotalTokens)))
+		usageSep := lipgloss.NewStyle().Faint(true).Render(" | ")
+		modelPart += usageSep + lipgloss.NewStyle().Foreground(colorMuted).Render(formatTokenUsage(meta.PromptTokens, meta.TotalTokens))
 	}
 	if meta.ContextWindow > 0 {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render(formatContextUsage(meta.TotalTokens, meta.ContextWindow)))
+		usageSep := lipgloss.NewStyle().Faint(true).Render(" | ")
+		modelPart += usageSep + lipgloss.NewStyle().Foreground(colorMuted).Render(formatContextUsage(meta.TotalTokens, meta.ContextWindow))
 	}
+	parts = append(parts, modelPart)
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
 	}
@@ -169,7 +172,20 @@ func renderModeHint(width int) string {
 
 func displayModelName(model string) string {
 	if _, name, ok := strings.Cut(strings.TrimSpace(model), "/"); ok && name != "" {
-		return name
+		model = name
+	}
+	model = strings.TrimSpace(model)
+	if strings.HasPrefix(model, "claude-") {
+		label := strings.TrimPrefix(model, "claude-")
+		label = strings.TrimSuffix(label, "-latest")
+		parts := strings.Split(label, "-")
+		for i, part := range parts {
+			if len(part) == 0 {
+				continue
+			}
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		}
+		return strings.Join(parts, " ")
 	}
 	return fallback(model, "-")
 }

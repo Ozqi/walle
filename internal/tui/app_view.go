@@ -271,7 +271,7 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 		return renderUserEntry(body, width)
 	case roleAssistant:
 		content := strings.TrimRight(renderMarkdownForTerminal(normalizeAssistantContent(entry.Content), true), "\n")
-		return renderIndentedEntry(wrapVisibleText(content, innerWidth))
+		return renderAssistantEntry(content, width)
 	case roleIntro:
 		return m.renderIntroEntry(width)
 	case roleHint:
@@ -287,6 +287,15 @@ func (m *AppModel) renderConversationEntry(entry conversationEntry, width int) s
 
 func renderIndentedEntry(rendered string) string {
 	return indentLines(rendered, "  ", "  ")
+}
+
+func renderAssistantEntry(content string, width int) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	body := wrapVisibleText(content, max(8, width-4))
+	return lipgloss.NewStyle().Foreground(colorBlue).Bold(true).Render("⏺ ") + indentLines(body, "", "  ")
 }
 
 func renderSystemEntry(title string, content string, width int) string {

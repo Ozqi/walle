@@ -77,6 +77,7 @@ type gitMeta struct {
 	Worktree  bool
 	Branch    string
 	Dirty     bool
+	Untracked bool
 	Shortstat string
 }
 
@@ -230,7 +231,7 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 	vp.MouseWheelDelta = 2
 
 	input := textarea.New()
-	input.Placeholder = "Press up to edit queued messages"
+	input.Placeholder = ""
 	input.Focus()
 	input.ShowLineNumbers = false
 	input.SetHeight(1)

@@ -26,6 +26,7 @@ func readGitMeta(dir string) gitMeta {
 		Worktree:  isLinkedWorktree(gitDir, commonDir),
 		Branch:    branch,
 		Dirty:     strings.TrimSpace(status) != "",
+		Untracked: hasGitUntracked(status),
 		Shortstat: compactShortstat(shortstat),
 	}
 }
@@ -61,4 +62,13 @@ func compactShortstat(text string) string {
 	text = strings.ReplaceAll(text, " deletion(-)", "-")
 	text = strings.ReplaceAll(text, ",", "")
 	return strings.Join(strings.Fields(text), " ")
+}
+
+func hasGitUntracked(status string) bool {
+	for _, line := range strings.Split(status, "\n") {
+		if strings.HasPrefix(line, "??") {
+			return true
+		}
+	}
+	return false
 }

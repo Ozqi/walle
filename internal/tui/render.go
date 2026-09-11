@@ -12,12 +12,12 @@ import (
 func renderMainPane(m *AppModel) string {
 	width := max(20, m.width)
 	snapshot := m.snapshot()
-	header := renderTopStatus(snapshot, m.modelName, width)
+	header := renderTopStatus(snapshot, width)
 	conversationHeight := max(1, m.viewport.Height)
 	conversation := lipgloss.NewStyle().Height(conversationHeight).Render(renderViewportPane(m.viewport, m.viewText))
 	inputBlock := renderInputBar(m.input.View(), width)
 	slashHint := m.renderSlashHint(max(12, width-4))
-	footer := renderInputFooter(snapshot, m.sessionID, width)
+	footer := renderInputFooter(snapshot, m.modelName, width)
 	blocks := []string{
 		conversation,
 		header,
@@ -54,18 +54,10 @@ func isEmptyInputPromptLine(line string) bool {
 	return plain == "" || plain == ">" || plain == "❯"
 }
 
-// renderTopStatus 渲染输入框上方的高频运行状态。
-// 参数：snapshot 为远端运行快照；modelName 为 attach 时或 model 事件更新的模型名。
-func renderTopStatus(snapshot statusSnapshot, modelName string, width int) string {
+// renderTopStatus 渲染输入框上方的状态分隔线；详细上下文放在 footer，贴近 Claude Code 布局。
+func renderTopStatus(snapshot statusSnapshot, width int) string {
 	meta := snapshot.Runtime
-	labelWidth := max(16, width/3)
-	if width < 72 {
-		labelWidth = 22
-	}
-	parts := []string{
-		lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), labelWidth)),
-		renderState(meta.State, meta.Busy),
-	}
+	parts := []string{renderState(meta.State, meta.Busy)}
 	if meta.Turn > 0 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("turn %d", meta.Turn)))
 	}
@@ -96,46 +88,35 @@ func renderPlainRule(width int) string {
 }
 
 // renderInputFooter 渲染输入框下方的低频上下文状态。
-// 参数：snapshot 为运行快照；width 为当前主列宽度。
-func renderInputFooter(snapshot statusSnapshot, _ string, width int) string {
+// 参数：snapshot 为运行快照；modelName 为 attach 时或 model 事件更新的模型名。
+func renderInputFooter(snapshot statusSnapshot, modelName string, width int) string {
 	meta := snapshot.Runtime
-	if width < 72 {
-		parts := make([]string, 0, 4)
-		if meta.Workdir != "" && meta.Workdir != "-" {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(homePath(meta.Workdir), 24)))
-		}
-		if meta.Git.Repo {
-			branch := truncateMiddle(fallback(meta.Git.Branch, "detached"), 12)
-			if meta.Git.Dirty {
-				branch += " *"
-			}
-			if meta.Git.Worktree {
-				branch = "worktree " + branch
-			}
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
-		}
-		if meta.PendingInput {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
-		}
-		if meta.ScrollPercent < 100 {
-			parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("scroll %d%%", meta.ScrollPercent)))
-		}
-		return renderFooterParts(parts)
-	}
 	parts := make([]string, 0, 6)
+	pathWidth := 24
+	branchWidth := 12
+	modelWidth := 22
+	if width >= 72 {
+		pathWidth = 36
+		branchWidth = 18
+		modelWidth = 30
+	}
 	if meta.Workdir != "" && meta.Workdir != "-" {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(homePath(meta.Workdir), 36)))
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorWhite).Render(truncateMiddle(homePath(meta.Workdir), pathWidth)))
 	}
 	if meta.Git.Repo {
-		branch := truncateMiddle(fallback(meta.Git.Branch, "detached"), 18)
+		branch := truncateMiddle(fallback(meta.Git.Branch, "detached"), branchWidth)
 		if meta.Git.Dirty {
 			branch += " *"
+		}
+		if meta.Git.Untracked {
+			branch += "?"
 		}
 		if meta.Git.Worktree {
 			branch = "worktree " + branch
 		}
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
+	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), modelWidth)))
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
 	}

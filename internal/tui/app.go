@@ -230,17 +230,17 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 	vp.MouseWheelDelta = 2
 
 	input := textarea.New()
-	input.Placeholder = ""
+	input.Placeholder = "Press up to edit queued messages"
 	input.Focus()
 	input.ShowLineNumbers = false
 	input.SetHeight(1)
 	input.Prompt = "❯ "
-	// 输入框使用参考 tmux 对话窗口的低对比深灰条，避免大白块抢视觉焦点。
-	input.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(colorYellow).Background(colorInputBg).Bold(true)
-	input.FocusedStyle.Text = lipgloss.NewStyle().Foreground(colorInputFg).Background(colorInputBg)
-	input.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(colorGray).Background(colorInputBg)
-	input.FocusedStyle.CursorLine = lipgloss.NewStyle().Foreground(colorInputFg).Background(colorInputBg)
-	input.FocusedStyle.CursorLineNumber = lipgloss.NewStyle().Foreground(colorGray).Background(colorInputBg)
+	// 输入框对齐 Claude Code：只突出提示符和占位文案，不铺满整行背景。
+	input.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	input.FocusedStyle.Text = lipgloss.NewStyle().Foreground(colorInputFg)
+	input.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(colorGray)
+	input.FocusedStyle.CursorLine = lipgloss.NewStyle().Foreground(colorInputFg)
+	input.FocusedStyle.CursorLineNumber = lipgloss.NewStyle().Foreground(colorGray)
 	input.BlurredStyle = input.FocusedStyle
 
 	return &AppModel{

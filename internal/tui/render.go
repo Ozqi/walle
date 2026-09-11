@@ -25,7 +25,7 @@ func renderMainPane(m *AppModel) string {
 	if slashHint != "" {
 		blocks = append(blocks, slashHint)
 	}
-	blocks = append(blocks, inputBlock)
+	blocks = append(blocks, inputBlock, renderPlainRule(width))
 	if footer != "" {
 		blocks = append(blocks, footer)
 	}
@@ -88,6 +88,10 @@ func renderStatusRule(label string, width int) string {
 	}
 	line := strings.Repeat("─", max(1, width-labelWidth-2)) + " " + label
 	return lipgloss.NewStyle().Foreground(colorGray).Render(line)
+}
+
+func renderPlainRule(width int) string {
+	return lipgloss.NewStyle().Foreground(colorGray).Render(strings.Repeat("─", max(12, width)))
 }
 
 // renderInputFooter 渲染输入框下方的低频上下文状态。

@@ -300,6 +300,10 @@ func renderAssistantEntry(content string, width int) string {
 
 func renderSystemEntry(title string, content string, width int) string {
 	content = strings.TrimSpace(content)
+	if isSystemError(content) {
+		body := loggerColorLines(wrapVisibleText(content, max(8, width-4)), colorError)
+		return lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("✘ ") + indentLines(body, "", "  ")
+	}
 	label := "recap"
 	if strings.TrimSpace(title) != "" {
 		label = truncateMiddle(strings.TrimSpace(title), 40)
@@ -311,6 +315,11 @@ func renderSystemEntry(title string, content string, width int) string {
 	}
 	body := loggerColorLines(wrapVisibleText(content, max(8, width-4)), colorMuted)
 	return prefix + ": " + indentLines(body, "", "  ")
+}
+
+func isSystemError(content string) bool {
+	content = strings.ToLower(strings.TrimSpace(content))
+	return strings.Contains(content, "error") || strings.Contains(content, "unknown") || strings.Contains(content, "not available") || strings.Contains(content, "disconnected")
 }
 
 func compactCommandOutput(content string, maxLines int) string {

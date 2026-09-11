@@ -68,6 +68,9 @@ type runtimeMeta struct {
 	LastToolName   string
 	PendingInput   bool
 	SessionID      string
+	PromptTokens   int
+	TotalTokens    int
+	ContextWindow  int
 	Workdir        string
 	Git            gitMeta
 }
@@ -106,6 +109,9 @@ type AppModel struct {
 	currentAssistant   int
 	currentStatus      string
 	remoteTurn         int
+	promptTokens       int
+	totalTokens        int
+	contextWindow      int
 	spinnerFrame       int
 	spinnerPending     bool
 	renderPending      bool
@@ -318,6 +324,11 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		event := msg.event
 		if event.Turn > 0 {
 			m.remoteTurn = event.Turn
+		}
+		if event.ContextWindow > 0 {
+			m.promptTokens = event.PromptTokens
+			m.totalTokens = event.TotalTokens
+			m.contextWindow = event.ContextWindow
 		}
 		switch event.Type {
 		case agentd.ProcessEventUser:

@@ -18,16 +18,19 @@ const supervisorSocket = "supervisor.sock"
 
 // ProcessSnapshot 是跨进程查询使用的只读 AgentProcess 快照。
 type ProcessSnapshot struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name,omitempty"`
-	State       ProcessState `json:"state"`
-	StartedAt   time.Time    `json:"started_at"`
-	Workspace   string       `json:"workspace"`
-	WorkLogPath string       `json:"worklog_path,omitempty"`
-	Model       string       `json:"model,omitempty"`
-	SessionID   string       `json:"session_id,omitempty"`
-	Turn        int          `json:"turn,omitempty"`
-	Interactive bool         `json:"interactive,omitempty"`
+	ID            string       `json:"id"`
+	Name          string       `json:"name,omitempty"`
+	State         ProcessState `json:"state"`
+	StartedAt     time.Time    `json:"started_at"`
+	Workspace     string       `json:"workspace"`
+	WorkLogPath   string       `json:"worklog_path,omitempty"`
+	Model         string       `json:"model,omitempty"`
+	SessionID     string       `json:"session_id,omitempty"`
+	Turn          int          `json:"turn,omitempty"`
+	PromptTokens  int          `json:"prompt_tokens,omitempty"`
+	TotalTokens   int          `json:"total_tokens,omitempty"`
+	ContextWindow int          `json:"context_window,omitempty"`
+	Interactive   bool         `json:"interactive,omitempty"`
 }
 
 // ProcessEventType 是 daemon 向 attached TUI 推送的事件类型。
@@ -48,17 +51,21 @@ const (
 
 // ProcessEvent 是 daemon 向 attached TUI 推送的结构化事件。
 type ProcessEvent struct {
-	Seq     uint64           `json:"seq"`
-	Type    ProcessEventType `json:"type"`
-	Text    string           `json:"text,omitempty"`
-	Kind    string           `json:"kind,omitempty"`
-	Name    string           `json:"name,omitempty"`
-	Args    string           `json:"args,omitempty"`
-	Result  string           `json:"result,omitempty"`
-	Error   string           `json:"error,omitempty"`
-	Busy    bool             `json:"busy,omitempty"`
-	Turn    int              `json:"turn,omitempty"`
-	Options []string         `json:"options,omitempty"`
+	Seq           uint64           `json:"seq"`
+	Type          ProcessEventType `json:"type"`
+	Text          string           `json:"text,omitempty"`
+	Kind          string           `json:"kind,omitempty"`
+	Name          string           `json:"name,omitempty"`
+	Args          string           `json:"args,omitempty"`
+	Result        string           `json:"result,omitempty"`
+	Error         string           `json:"error,omitempty"`
+	Busy          bool             `json:"busy,omitempty"`
+	Turn          int              `json:"turn,omitempty"`
+	PromptTokens  int              `json:"prompt_tokens,omitempty"`
+	TotalTokens   int              `json:"total_tokens,omitempty"`
+	ContextWindow int              `json:"context_window,omitempty"`
+	Options       []string         `json:"options,omitempty"`
+	Concurrent    bool             `json:"concurrent,omitempty"`
 }
 
 // InteractiveProcess 是控制通道依赖的最小长驻 Agent 接口。

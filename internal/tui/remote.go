@@ -24,6 +24,9 @@ func LaunchAttachedTUI(ctx context.Context, client RemoteClient) error {
 	snapshot := client.Snapshot()
 	model := NewAppModel(ctx, snapshot.Model, snapshot.SessionID)
 	model.remoteTurn = snapshot.Turn
+	model.promptTokens = snapshot.PromptTokens
+	model.totalTokens = snapshot.TotalTokens
+	model.contextWindow = snapshot.ContextWindow
 	model.remoteSubmit = client.Submit
 	model.remoteStop = client.Stop
 	model.busy = snapshot.State == agentd.ProcessRunning

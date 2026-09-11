@@ -117,6 +117,12 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorBlue).Render(branch))
 	}
 	parts = append(parts, lipgloss.NewStyle().Foreground(colorCommand).Render(truncateMiddle(fallback(modelName, "-"), modelWidth)))
+	if meta.ContextWindow > 0 || meta.TotalTokens > 0 || meta.PromptTokens > 0 {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render(formatTokenUsage(meta.PromptTokens, meta.TotalTokens)))
+	}
+	if meta.ContextWindow > 0 {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).Render(formatContextUsage(meta.TotalTokens, meta.ContextWindow)))
+	}
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
 	}
@@ -124,6 +130,24 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("scroll %d%%", meta.ScrollPercent)))
 	}
 	return renderFooterParts(parts)
+}
+
+func formatTokenUsage(promptTokens int, totalTokens int) string {
+	if promptTokens <= 0 && totalTokens <= 0 {
+		return "tok 0i/0o"
+	}
+	if promptTokens > 0 && totalTokens > 0 {
+		return fmt.Sprintf("tok %di/%do", promptTokens, totalTokens-promptTokens)
+	}
+	return fmt.Sprintf("tok %d", max(promptTokens, totalTokens))
+}
+
+func formatContextUsage(totalTokens int, contextWindow int) string {
+	percent := totalTokens * 100 / contextWindow
+	if percent == 0 && totalTokens > 0 {
+		percent = 1
+	}
+	return fmt.Sprintf("ctx %d%% used", percent)
 }
 
 func renderFooterParts(parts []string) string {

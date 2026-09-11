@@ -51,10 +51,12 @@ func (s *DaemonSession) Snapshot() agentd.ProcessSnapshot {
 	if s.busy {
 		state = agentd.ProcessRunning
 	}
+	promptTokens, totalTokens, contextWindow := s.runtime.Agent.TokenUsage()
 	return agentd.ProcessSnapshot{
 		ID: s.id, Name: s.name, State: state, StartedAt: s.started,
 		Workspace: s.runtime.ProjectDir, Model: s.runtime.ModelRef, SessionID: s.runtime.SessionID,
-		Turn: s.runtime.Agent.CurrentTurn(), Interactive: true,
+		Turn: s.runtime.Agent.CurrentTurn(), PromptTokens: promptTokens, TotalTokens: totalTokens,
+		ContextWindow: contextWindow, Interactive: true,
 	}
 }
 
@@ -311,8 +313,13 @@ func (s *DaemonSession) publish(event agentd.ProcessEvent) {
 }
 
 func (s *DaemonSession) publishLocked(event agentd.ProcessEvent) {
-	if event.Turn == 0 && s.runtime != nil && s.runtime.Agent != nil {
-		event.Turn = s.runtime.Agent.CurrentTurn()
+	if s.runtime != nil && s.runtime.Agent != nil {
+		if event.Turn == 0 {
+			event.Turn = s.runtime.Agent.CurrentTurn()
+		}
+		if event.ContextWindow == 0 {
+			event.PromptTokens, event.TotalTokens, event.ContextWindow = s.runtime.Agent.TokenUsage()
+		}
 	}
 	// 调用方必须持有 s.mu，保证 seq、历史和订阅者集合在同一临界区更新。
 	// 连续 token 在历史中合并以限制重放体积，实时订阅仍收到原始增量事件。

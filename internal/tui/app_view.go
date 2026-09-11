@@ -155,6 +155,9 @@ func (m *AppModel) snapshot() statusSnapshot {
 		LastToolName:   m.lastTool,
 		PendingInput:   strings.TrimSpace(m.pendingInput) != "",
 		SessionID:      m.sessionID,
+		PromptTokens:   m.promptTokens,
+		TotalTokens:    m.totalTokens,
+		ContextWindow:  m.contextWindow,
 	}}
 	snapshot.Runtime.Workdir, snapshot.Runtime.Git = m.runtimeLocation()
 	return snapshot

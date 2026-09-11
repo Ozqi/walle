@@ -81,6 +81,7 @@ func renderTopStatus(snapshot statusSnapshot, modelName string, width int) strin
 
 func renderStatusRule(label string, width int) string {
 	width = max(12, width)
+	label = label + " ─"
 	labelWidth := lipgloss.Width(label)
 	if labelWidth+3 >= width {
 		return label

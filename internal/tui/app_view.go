@@ -83,7 +83,7 @@ func (m *AppModel) resize() {
 func (m *AppModel) reservedMainHeight(width int) int {
 	headerHeight := 1
 	inputHeight := renderedLineCount(renderInputBar(m.input.View(), width))
-	footerHeight := renderedLineCount(renderInputFooter(m.snapshot(), m.sessionID, width))
+	footerHeight := renderedLineCount(renderInputFooter(m.snapshot(), m.modelName, width))
 	slashHeight := renderedLineCount(m.renderSlashHint(max(12, width-4)))
 	return headerHeight + slashHeight + inputHeight + 1 + footerHeight + 1
 }
@@ -118,9 +118,8 @@ func (m *AppModel) refreshView() {
 // renderIntroEntry 渲染 session 开头的固定说明；它作为历史条目参与滚动。
 func (m *AppModel) renderIntroEntry(width int) string {
 	width = max(24, width)
-	title := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("walle 启动上下文")
 	muted := lipgloss.NewStyle().Foreground(colorMuted)
-	lines := []string{title, muted.Render("预载提示词")}
+	lines := []string{muted.Render("预载提示词")}
 	for _, prompt := range fallbackList(m.introInfo.Prompts, []string{"main.md"}) {
 		lines = append(lines, "  • "+lipgloss.NewStyle().Foreground(colorWhite).Render(prompt))
 	}

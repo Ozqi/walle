@@ -171,11 +171,11 @@ func renderCodeBlock(block string, color bool) string {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			lines[i] = logger.Gray(line)
 		} else if strings.HasPrefix(line, "+") {
-			lines[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Background(lipgloss.Color("#2a3832")).Render(line)
+			lines[i] = lipgloss.NewStyle().Foreground(colorGreen).Background(lipgloss.Color("#2F3A30")).Render(line)
 		} else if strings.HasPrefix(line, "-") {
-			lines[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("#f38ba8")).Background(lipgloss.Color("#3a252a")).Render(line)
+			lines[i] = lipgloss.NewStyle().Foreground(colorError).Background(lipgloss.Color("#3B2D26")).Render(line)
 		} else {
-			lines[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4")).Render(line)
+			lines[i] = lipgloss.NewStyle().Foreground(colorResult).Render(line)
 		}
 	}
 	return strings.Join(lines, "\n")

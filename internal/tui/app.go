@@ -184,19 +184,20 @@ type remoteStopResultMsg struct {
 var spinnerFrames = []string{"✶", "✻", "✢", "·"}
 
 var (
-	colorGreen   = lipgloss.Color("#9ece6a")
-	colorBlue    = lipgloss.Color("#7aa2f7")
-	colorPurple  = lipgloss.Color("#bb9af7")
-	colorOrange  = lipgloss.Color("#DFA241")
-	colorYellow  = lipgloss.Color("#F2C14E")
-	colorGray    = lipgloss.Color("#565f89")
-	colorWhite   = lipgloss.Color("#e2e1f1")
+	// WALL·E 主题色板：暖黄/锈橙作主色，机械灰作结构线，柔和蓝用于工具与分支状态。
+	colorGreen   = lipgloss.Color("#9CB66F")
+	colorBlue    = lipgloss.Color("#76A7B8")
+	colorPurple  = lipgloss.Color("#A88F72")
+	colorOrange  = lipgloss.Color("#D9902F")
+	colorYellow  = lipgloss.Color("#E7B84A")
+	colorGray    = lipgloss.Color("#5F6A61")
+	colorWhite   = lipgloss.Color("#E8E1CF")
 	colorCommand = colorOrange
-	colorResult  = lipgloss.Color("#cdd6f4")
-	colorError   = lipgloss.Color("#f38ba8")
-	colorInputBg = lipgloss.Color("#404a4f")
-	colorInputFg = lipgloss.Color("#dce4e3")
-	colorMuted   = lipgloss.Color("#93a799")
+	colorResult  = lipgloss.Color("#CFC6AA")
+	colorError   = lipgloss.Color("#D66A4A")
+	colorInputBg = lipgloss.Color("#3D453F")
+	colorInputFg = lipgloss.Color("#E1D8C2")
+	colorMuted   = lipgloss.Color("#9AA28E")
 
 	mainViewStyle = lipgloss.NewStyle().
 			Padding(0, 0)

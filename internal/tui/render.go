@@ -153,9 +153,9 @@ func renderFooterParts(parts []string) string {
 }
 
 func renderModeHint(width int) string {
-	hint := "  ⏵⏵ auto mode on (shift+tab to cycle)"
+	hint := "  ctrl+c clear · ctrl+d detach"
 	if width >= 72 {
-		hint += " · ← for agents"
+		hint += " · /stop stop run · ↑ last input"
 	}
 	return lipgloss.NewStyle().Foreground(colorMuted).Render(clipVisibleLine(hint, width))
 }

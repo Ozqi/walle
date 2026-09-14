@@ -155,7 +155,7 @@ func renderFooterParts(parts []string) string {
 func renderModeHint(width int) string {
 	hint := "  ctrl+c clear · ctrl+d detach"
 	if width >= 72 {
-		hint += " · /stop stop run · ↑ last input"
+		hint += " · /stop stop run"
 	}
 	return lipgloss.NewStyle().Foreground(colorMuted).Render(clipVisibleLine(hint, width))
 }

@@ -5,6 +5,7 @@
 3. [x] TUI 可通过 Unix Socket attach daemon Agent；`Ctrl+D` 或 `/detach` 只退出客户端，后台继续运行。实现：`b62e393a445310bdafc3dd0510e8ca138d086981`。
 4. [x] TUI slash 命令支持 Tab 补全。实现：`23e28ccb041e68a770bd91e8efa1462a4c4f8a3f`。
 5. [x] 按上箭头显示上一条提交内容。实现：`dc150761f76dcc1cb3922d7ddead0adea5f763e7`。
+6. [ ] `/` 触发 slash 命令提示时，需要按命令名、说明、快捷键/状态做色彩区分，并保证多列文本左对齐，避免当前列表视觉混乱、难以扫读。
 
 ## CLI 查看和接入后台 Agent
 

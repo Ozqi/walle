@@ -1,4 +1,4 @@
-package runtime
+package daemon
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Ozqi/walle/internal/agentd"
 	"github.com/Ozqi/walle/internal/commands"
+	agentrt "github.com/Ozqi/walle/internal/runtime"
 	"github.com/Ozqi/walle/internal/toolevent"
 )
 
@@ -17,7 +17,7 @@ import (
 type DaemonSession struct {
 	mu        sync.Mutex
 	ctx       context.Context
-	runtime   *Runtime
+	runtime   *agentrt.Runtime
 	id        string
 	name      string
 	started   time.Time
@@ -25,12 +25,12 @@ type DaemonSession struct {
 	provider  string
 	runCancel context.CancelFunc
 	seq       uint64
-	events    []agentd.ProcessEvent
-	subs      map[chan agentd.ProcessEvent]struct{}
+	events    []ProcessEvent
+	subs      map[chan ProcessEvent]struct{}
 }
 
 // NewDaemonSession 为一个 Runtime 创建长驻交互会话。
-func NewDaemonSession(ctx context.Context, rt *Runtime, idName ...string) *DaemonSession {
+func NewDaemonSession(ctx context.Context, rt *agentrt.Runtime, idName ...string) *DaemonSession {
 	provider, _, _ := strings.Cut(rt.ModelRef, "/")
 	id := "interactive"
 	name := "interactive"
@@ -40,32 +40,32 @@ func NewDaemonSession(ctx context.Context, rt *Runtime, idName ...string) *Daemo
 	if len(idName) > 1 && strings.TrimSpace(idName[1]) != "" {
 		name = idName[1]
 	}
-	return &DaemonSession{ctx: ctx, runtime: rt, id: id, name: name, provider: provider, started: time.Now().UTC(), subs: make(map[chan agentd.ProcessEvent]struct{})}
+	return &DaemonSession{ctx: ctx, runtime: rt, id: id, name: name, provider: provider, started: time.Now().UTC(), subs: make(map[chan ProcessEvent]struct{})}
 }
 
 // Snapshot 返回 control socket 使用的只读会话状态。
-func (s *DaemonSession) Snapshot() agentd.ProcessSnapshot {
+func (s *DaemonSession) Snapshot() ProcessSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := agentd.ProcessIdle
+	state := ProcessIdle
 	if s.busy {
-		state = agentd.ProcessRunning
+		state = ProcessRunning
 	}
 	promptTokens, totalTokens, contextWindow := s.runtime.Agent.TokenUsage()
-	return agentd.ProcessSnapshot{
+	return ProcessSnapshot{
 		ID: s.id, Name: s.name, State: state, StartedAt: s.started,
 		Workspace: s.runtime.ProjectDir, Model: s.runtime.ModelRef, SessionID: s.runtime.SessionID,
 		Turn: s.runtime.Agent.CurrentTurn(), PromptTokens: promptTokens, TotalTokens: totalTokens,
-		ContextWindow: contextWindow, Interactive: true,
+		ContextWindow: contextWindow,
 	}
 }
 
 // Attach 原子返回历史事件并注册实时订阅者。
-func (s *DaemonSession) Attach() ([]agentd.ProcessEvent, <-chan agentd.ProcessEvent, func()) {
+func (s *DaemonSession) Attach() ([]ProcessEvent, <-chan ProcessEvent, func()) {
 	// 在同一临界区复制历史并注册订阅者，避免 history 与实时流之间出现事件缺口。
 	s.mu.Lock()
-	history := append([]agentd.ProcessEvent(nil), s.events...)
-	ch := make(chan agentd.ProcessEvent, 256)
+	history := append([]ProcessEvent(nil), s.events...)
+	ch := make(chan ProcessEvent, 256)
 	s.subs[ch] = struct{}{}
 	s.mu.Unlock()
 	return history, ch, func() {
@@ -86,14 +86,14 @@ func (s *DaemonSession) Submit(text string) error {
 		return fmt.Errorf("input is required")
 	}
 	if strings.HasPrefix(text, "/") {
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventUser, Text: text})
+		s.publish(ProcessEvent{Type: ProcessEventUser, Text: text})
 		if text == "/stop" {
 			return s.stop()
 		}
 		if s.handlePickerSlash(text) {
 			return nil
 		}
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: s.handleSlash(text)})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: s.handleSlash(text)})
 		return nil
 	}
 	// 普通输入只允许单轮执行；取消函数与 busy 在启动 goroutine 前一起发布。
@@ -106,8 +106,8 @@ func (s *DaemonSession) Submit(text string) error {
 	s.busy = true
 	s.runCancel = cancel
 	s.mu.Unlock()
-	s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventUser, Text: text})
-	s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventState, Busy: true})
+	s.publish(ProcessEvent{Type: ProcessEventUser, Text: text})
+	s.publish(ProcessEvent{Type: ProcessEventState, Busy: true})
 	go s.run(runCtx, text)
 	return nil
 }
@@ -130,7 +130,7 @@ func (s *DaemonSession) stop() error {
 	cancel := s.runCancel
 	if !s.busy || cancel == nil {
 		s.mu.Unlock()
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "no active run"})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "no active run"})
 		return nil
 	}
 	s.mu.Unlock()
@@ -149,45 +149,45 @@ func (s *DaemonSession) handlePickerSlash(text string) bool {
 	busy := s.busy
 	s.mu.Unlock()
 	if busy {
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "agent is busy"})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "agent is busy"})
 		return true
 	}
 	if fields[0] == "/provider" {
 		// provider 无参数时只返回候选列表；有参数时切换当前 provider 并按需触发登录。
 		if len(fields) == 1 {
-			providers := s.runtime.Providers()
+			providers := providers(s.runtime)
 			options := make([]string, 0, len(providers))
 			for _, provider := range providers {
 				options = append(options, provider.Name)
 			}
-			s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventPicker, Kind: "provider", Options: options})
+			s.publish(ProcessEvent{Type: ProcessEventPicker, Kind: "provider", Options: options})
 			return true
 		}
 		if len(fields) != 2 {
-			s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "usage: /provider [name]"})
+			s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "usage: /provider [name]"})
 			return true
 		}
 		s.setProvider(fields[1])
 		provider := s.currentProvider()
 		if provider == "openai" {
-			for _, provider := range s.runtime.Providers() {
+			for _, provider := range providers(s.runtime) {
 				if provider.Name == "openai" && provider.LoggedIn {
 					go s.publishModels("openai")
 					return true
 				}
 			}
-			loginURL, done, err := s.runtime.StartOpenAILogin(s.ctx)
+			loginURL, done, err := startOpenAILoginFunc(s.ctx)
 			if err != nil {
-				s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: err.Error()})
+				s.publish(ProcessEvent{Type: ProcessEventSystem, Text: err.Error()})
 				return true
 			}
-			s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "Open this URL to sign in with ChatGPT:\n" + loginURL})
+			s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "Open this URL to sign in with ChatGPT:\n" + loginURL})
 			go func() {
 				if err := <-done; err != nil {
-					s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "Codex login failed: " + err.Error()})
+					s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "Codex login failed: " + err.Error()})
 					return
 				}
-				s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "Codex login complete"})
+				s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "Codex login complete"})
 				go s.publishModels("openai")
 			}()
 			return true
@@ -201,7 +201,7 @@ func (s *DaemonSession) handlePickerSlash(text string) bool {
 		return true
 	}
 	if len(fields) != 2 {
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "usage: /model [name]"})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "usage: /model [name]"})
 		return true
 	}
 	modelRef := fields[1]
@@ -216,13 +216,13 @@ func (s *DaemonSession) switchModel(modelRef string) {
 	// handlePickerSlash 已在启动 goroutine 前检查 busy；SwitchModel 自身只串行化多个切换请求。
 	result, err := s.runtime.SwitchModel(s.ctx, modelRef)
 	if err != nil {
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: err.Error()})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: err.Error()})
 		return
 	}
 	provider, _, _ := strings.Cut(result, "/")
 	s.setProvider(provider)
-	s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventModel, Text: result})
-	s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "Switched model: " + result})
+	s.publish(ProcessEvent{Type: ProcessEventModel, Text: result})
+	s.publish(ProcessEvent{Type: ProcessEventSystem, Text: "Switched model: " + result})
 }
 
 func (s *DaemonSession) currentProvider() string {
@@ -238,12 +238,12 @@ func (s *DaemonSession) setProvider(provider string) {
 }
 
 func (s *DaemonSession) publishModels(provider string) {
-	models, err := s.runtime.ProviderModels(s.ctx, provider)
+	models, err := providerModelsFunc(s.ctx, provider)
 	if err != nil {
-		s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: err.Error()})
+		s.publish(ProcessEvent{Type: ProcessEventSystem, Text: err.Error()})
 		return
 	}
-	s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventPicker, Kind: "model", Name: provider, Options: models})
+	s.publish(ProcessEvent{Type: ProcessEventPicker, Kind: "model", Name: provider, Options: models})
 }
 
 func (s *DaemonSession) handleSlash(text string) string {
@@ -280,39 +280,39 @@ func (s *DaemonSession) run(runCtx context.Context, text string) {
 	// 1. 当前轮临时接管 Agent 工具事件 sink，并把 token/tool 事件转成 daemon 事件。
 	prev := s.runtime.Agent.SetToolEventSink(func(event toolevent.ToolEvent) {
 		s.runtime.RecordToolEvent(event)
-		s.publish(agentd.ProcessEvent{
-			Type: agentd.ProcessEventTool, Kind: event.Kind, Name: event.Name, Args: event.Args,
-			Text: event.Text, Result: event.Result, Error: event.Error,
+		s.publish(ProcessEvent{
+			Type: ProcessEventTool, Kind: event.Kind, Name: event.Name, Args: event.Args,
+			Text: event.Text, Result: event.Result, Error: event.Error, Concurrent: event.Concurrent,
 		})
 	})
 	defer s.runtime.Agent.SetToolEventSink(prev)
 	_, err := s.runtime.Agent.RunStream(runCtx, s.runtime.MessageCtx, text,
-		func(token string) { s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventAssistant, Text: token}) },
-		func(token string) { s.publish(agentd.ProcessEvent{Type: agentd.ProcessEventThinking, Text: token}) },
+		func(token string) { s.publish(ProcessEvent{Type: ProcessEventAssistant, Text: token}) },
+		func(token string) { s.publish(ProcessEvent{Type: ProcessEventThinking, Text: token}) },
 	)
-	// 2. 在锁内发布终态并清理运行状态，避免新 Submit 观察到半完成状态。
+	// 2. 在锁内先清理运行状态再发布终态 state，避免 TUI 收到过期 busy。
 	s.mu.Lock()
-	if runCtx.Err() != nil {
-		s.publishLocked(agentd.ProcessEvent{Type: agentd.ProcessEventSystem, Text: "stopped current run"})
-	} else if err != nil {
-		message := "LLM error: " + err.Error()
-		s.publishLocked(agentd.ProcessEvent{Type: agentd.ProcessEventError, Text: message, Error: message})
-	} else {
-		s.publishLocked(agentd.ProcessEvent{Type: agentd.ProcessEventDone})
-	}
-	s.publishLocked(agentd.ProcessEvent{Type: agentd.ProcessEventState})
 	s.busy = false
 	s.runCancel = nil
+	if runCtx.Err() != nil {
+		s.publishLocked(ProcessEvent{Type: ProcessEventSystem, Text: "stopped current run"})
+	} else if err != nil {
+		message := "LLM error: " + err.Error()
+		s.publishLocked(ProcessEvent{Type: ProcessEventError, Text: message, Error: message})
+	} else {
+		s.publishLocked(ProcessEvent{Type: ProcessEventDone})
+	}
+	s.publishLocked(ProcessEvent{Type: ProcessEventState})
 	s.mu.Unlock()
 }
 
-func (s *DaemonSession) publish(event agentd.ProcessEvent) {
+func (s *DaemonSession) publish(event ProcessEvent) {
 	s.mu.Lock()
 	s.publishLocked(event)
 	s.mu.Unlock()
 }
 
-func (s *DaemonSession) publishLocked(event agentd.ProcessEvent) {
+func (s *DaemonSession) publishLocked(event ProcessEvent) {
 	if s.runtime != nil && s.runtime.Agent != nil {
 		if event.Turn == 0 {
 			event.Turn = s.runtime.Agent.CurrentTurn()

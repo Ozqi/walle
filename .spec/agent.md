@@ -49,7 +49,8 @@ sequenceDiagram
 ## 运行规则
 
 - 空 context 时才注入 system prompt 和 skill snapshot。
-- 每轮先写 user message，再按 `ContextAutoCompress` 判断是否压缩。
+- 每轮先写 user message；如果用户本轮要求“只回复/只输出”等严格最终格式，再追加一条临时 system reminder 约束本轮最终回答。
+- 然后按 `ContextAutoCompress` 判断是否压缩。
 > TODO: 这块是啥情况，这个AutoCompress做了啥？我不记得了
 - 流式路径走 `model.Stream`；`DisableStream=true` 走 `model.Generate`，两条路径语义必须一致。
 - 有 ToolCall 时先写 assistant tool-call message，再写每个 tool result message，然后进入下一 turn。

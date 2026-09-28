@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -117,13 +118,37 @@ func renderInputFooter(snapshot statusSnapshot, modelName string, width int) str
 		modelPart += usageSep + lipgloss.NewStyle().Foreground(colorMuted).Render(formatContextUsage(meta.TotalTokens, meta.ContextWindow))
 	}
 	parts = append(parts, modelPart)
+	if meta.Busy {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render(formatElapsed(meta.State, meta.Elapsed)))
+	} else if meta.State != "" && meta.State != "idle" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(statusStateColor(meta.State)).Render(meta.State))
+	}
 	if meta.PendingInput {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorYellow).Render("queued"))
 	}
 	if meta.ScrollPercent < 100 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorPurple).Render(fmt.Sprintf("scroll %d%%", meta.ScrollPercent)))
 	}
-	return renderFooterParts(parts)
+	return renderFooterParts(parts, width)
+}
+
+func formatElapsed(state string, elapsed time.Duration) string {
+	elapsed = elapsed.Truncate(time.Second)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	return fmt.Sprintf("%s %s", state, elapsed)
+}
+
+func statusStateColor(state string) lipgloss.Color {
+	switch state {
+	case "done":
+		return colorGreen
+	case "error", "disconnected":
+		return colorError
+	default:
+		return colorMuted
+	}
 }
 
 func formatTokenUsage(promptTokens int, totalTokens int) string {
@@ -144,12 +169,12 @@ func formatContextUsage(totalTokens int, contextWindow int) string {
 	return fmt.Sprintf("ctx %d%% used", percent)
 }
 
-func renderFooterParts(parts []string) string {
+func renderFooterParts(parts []string, width int) string {
 	if len(parts) == 0 {
 		return ""
 	}
 	separator := lipgloss.NewStyle().Faint(true).Render(" │ ")
-	return "  " + strings.Join(parts, separator)
+	return clipVisibleLine("  "+strings.Join(parts, separator), width)
 }
 
 func renderModeHint(width int) string {

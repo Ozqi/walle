@@ -268,7 +268,7 @@ func (a *Agent) RunStream(ctx context.Context, messageCtx *agentctx.Context, inp
 
 // RunStreamWithOptions 运行 Agent，并为本次模型调用追加临时 model options。
 // 参数：opts 只影响当前 RunStream 调用，不改变 Agent 持有的模型和工具列表。
-// 调用层级：runtime.RunProcess/交互会话 -> RunStreamWithOptions -> model.Stream。
+// 调用层级：Runtime 交互执行 -> RunStreamWithOptions -> model.Stream。
 // 执行边界：模型流读取可与工具执行重叠，但工具由单 worker 串行执行；assistant tool-call
 // 消息先写入上下文，再按派发顺序写入 tool result。空响应最多追加两次 user reminder 后重试。
 func (a *Agent) RunStreamWithOptions(ctx context.Context, messageCtx *agentctx.Context, input string, onToken TokenCallback, opts []model.Option, onReasoning ...TokenCallback) (string, error) {
@@ -290,6 +290,12 @@ func (a *Agent) RunStreamWithOptions(ctx context.Context, messageCtx *agentctx.C
 	if err := a.ctxManager.AddMessage(messageCtx, userMsg); err != nil {
 		return "", fmt.Errorf("failed to add user message: %w", err)
 	}
+	if strictFinalOutputRequested(input) {
+		msg := &schema.Message{Role: schema.System, Content: strictFinalOutputReminder}
+		if err := a.ctxManager.AddMessage(messageCtx, msg); err != nil {
+			return "", fmt.Errorf("failed to add final output reminder: %w", err)
+		}
+	}
 
 	// 2. 在进入 ReAct 循环前按配置压缩过长上下文。
 	if a.config.ContextAutoCompress && a.ctxManager.ShouldCompress(messageCtx) {
@@ -302,6 +308,7 @@ func (a *Agent) RunStreamWithOptions(ctx context.Context, messageCtx *agentctx.C
 
 	// 3. 逐轮调用模型；有工具调用时执行并回写，无工具调用时提交最终回答。
 	repeatGuard := newToolRepeatGuard(a.config.RepeatToolLimit)
+	failedTools := make(map[string]bool) // 本次运行内曾失败的工具名；成功重试时写入恢复提示，避免最终回答沿用旧失败结论。
 	emptyResponseRetries := 0
 
 	for turn := 0; ; turn++ {
@@ -379,8 +386,12 @@ func (a *Agent) RunStreamWithOptions(ctx context.Context, messageCtx *agentctx.C
 				}
 				for idx, tc := range finalMessage.ToolCalls {
 					res := a.executeToolWithRepeatGuard(ctx, repeatGuard, toolRequest{idx: idx, tc: tc})
-					if err := a.addToolResult(messageCtx, tc, res.result, res.err); err != nil {
+					recovered := res.err == nil && failedTools[tc.Function.Name]
+					if err := a.addToolResult(messageCtx, tc, res.result, res.err, recovered); err != nil {
 						return "", fmt.Errorf("tool execution failed: %w", err)
+					}
+					if res.err != nil {
+						failedTools[tc.Function.Name] = true
 					}
 				}
 				continue
@@ -567,8 +578,12 @@ func (a *Agent) RunStreamWithOptions(ctx context.Context, messageCtx *agentctx.C
 				if res.tc.ID == "" {
 					continue
 				}
-				if err := a.addToolResult(messageCtx, res.tc, res.result, res.err); err != nil {
+				recovered := res.err == nil && failedTools[res.tc.Function.Name]
+				if err := a.addToolResult(messageCtx, res.tc, res.result, res.err, recovered); err != nil {
 					return "", fmt.Errorf("tool execution failed: %w", err)
+				}
+				if res.err != nil {
+					failedTools[res.tc.Function.Name] = true
 				}
 			}
 
@@ -605,6 +620,36 @@ func (a *Agent) addEmptyResponseReminder(messageCtx *agentctx.Context) error {
 		return fmt.Errorf("failed to add empty response reminder: %w", err)
 	}
 	return nil
+}
+
+const strictFinalOutputReminder = "本轮用户明确要求了最终输出格式。最终回答只能包含用户指定的字段或内容；不要添加寒暄、标题、解释、过程总结、额外验证细节或下一步建议。"
+
+func strictFinalOutputRequested(input string) bool {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return false
+	}
+	markers := []string{
+		"只回复",
+		"只输出",
+		"最后只回复",
+		"最终只回复",
+		"仅回复",
+		"仅输出",
+		"不要添加",
+		"do not add",
+		"respond with",
+		"output only",
+		"only output",
+		"reply only",
+	}
+	lower := strings.ToLower(input)
+	for _, marker := range markers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // =============================================================================

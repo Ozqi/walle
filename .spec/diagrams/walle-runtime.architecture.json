@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Runtime",
+    "output": "/tmp/walle-runtime.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "opts",
+      "type": "external",
+      "label": "Options",
+      "sublabel": "workspace/model/session",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "config",
+      "type": "backend",
+      "label": "Config loader",
+      "sublabel": "env + settings",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "backend",
+      "label": "LLM client",
+      "sublabel": "Claude/OpenAI/Codex",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "ReAct loop",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "Tool Registry",
+      "sublabel": "base/skill/context",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "sdk",
+      "type": "external",
+      "label": "Public SDK",
+      "sublabel": "runtime package",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "ctx",
+      "type": "database",
+      "label": "Context Store",
+      "sublabel": "session JSONL",
+      "pos": [
+        580,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "opts-config",
+      "from": "opts",
+      "to": "config"
+    },
+    {
+      "id": "config-llm",
+      "from": "config",
+      "to": "llm"
+    },
+    {
+      "id": "llm-agent",
+      "from": "llm",
+      "to": "agent",
+      "variant": "emphasis"
+    },
+    {
+      "id": "agent-tools",
+      "from": "agent",
+      "to": "tools"
+    },
+    {
+      "id": "agent-ctx",
+      "from": "agent",
+      "to": "ctx",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Runtime scope",
+      "items": [
+        "One Runtime per interactive process or SDK instance",
+        "Runtime does not know daemon protocol",
+        "SwitchModel rebinds context tool and tools"
+      ]
+    }
+  ]
+}

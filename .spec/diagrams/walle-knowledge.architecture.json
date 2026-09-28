@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Knowledge / Skill",
+    "output": "/tmp/walle-knowledge.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "dirs",
+      "type": "external",
+      "label": "Skill dirs",
+      "sublabel": "user + project",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "manager",
+      "type": "backend",
+      "label": "Skill Manager",
+      "sublabel": "load snapshot",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "inject skills",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "tool",
+      "type": "backend",
+      "label": "skill.skill",
+      "sublabel": "model access",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "commands",
+      "type": "backend",
+      "label": "/skill",
+      "sublabel": "list/get/reload",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "prompt",
+      "type": "database",
+      "label": "System prompt",
+      "sublabel": "skill text",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "dirs-manager",
+      "from": "dirs",
+      "to": "manager"
+    },
+    {
+      "id": "manager-agent",
+      "from": "manager",
+      "to": "agent",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Loading",
+      "items": [
+        "User and project skills are loaded",
+        "Project same-name skill overrides user skill",
+        "No hot reload except /skill reload"
+      ]
+    }
+  ]
+}

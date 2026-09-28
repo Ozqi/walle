@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Model Config",
+    "output": "/tmp/walle-model-config.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "env",
+      "type": "external",
+      "label": "~/.walle/.env",
+      "sublabel": "provider blocks",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "settings",
+      "type": "database",
+      "label": "settings.json",
+      "sublabel": "default model/auth",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "utils",
+      "type": "backend",
+      "label": "LoadConfig",
+      "sublabel": "merge priority",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "backend",
+      "label": "LLM client",
+      "sublabel": "format dispatch",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "openai",
+      "type": "cloud",
+      "label": "OpenAI-compatible",
+      "sublabel": "chat model",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "codex",
+      "type": "cloud",
+      "label": "Codex",
+      "sublabel": "OAuth Responses",
+      "pos": [
+        760,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime",
+      "sublabel": "bind tools",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "settings-utils",
+      "from": "settings",
+      "to": "utils"
+    },
+    {
+      "id": "utils-llm",
+      "from": "utils",
+      "to": "llm",
+      "variant": "emphasis"
+    },
+    {
+      "id": "llm-openai",
+      "from": "llm",
+      "to": "openai"
+    },
+    {
+      "id": "llm-codex",
+      "from": "llm",
+      "to": "codex"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Model reference",
+      "items": [
+        "LLM_MODEL is provider/model",
+        "Provider selects LLM_<PROVIDER>_*",
+        "CLI --model overrides one Runtime only"
+      ]
+    }
+  ]
+}

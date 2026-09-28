@@ -1,6 +1,6 @@
 # TUI
 
-> 由 Claude Fable 5 于 2026-08-23 阅读 `cmd/walle/*.go`、`internal/tui/*.go`、`internal/runtime/daemon_session.go` 与 `internal/agentd/control.go` 后更新。
+> 当前实现见 `cmd/walle/*.go`、`internal/tui/*.go` 与 `internal/daemon/*.go`。
 > 覆盖范围：默认 TUI、daemon attach、slash command 与状态渲染。
 
 ## 职责

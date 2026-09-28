@@ -20,6 +20,7 @@ RunStreamWithOptions
   -> ensureConversationSetup
   -> WithToolRuntime
   -> AddMessage(user)
+  -> optional strict final-output reminder
   -> optional LMCompress
   -> loop:
        GetMessages
@@ -38,10 +39,11 @@ RunStreamWithOptions
 | `NewAgent` | 构建 `toolMap`，加载 skill manager，设置默认 `RepeatToolLimit=5`。 |
 | `RunStreamWithOptions` | 主循环；`DisableStream=true` 时走 `Generate` 兼容路径。 |
 | `ensureConversationSetup` | 仅在空 context 时注入 system prompt 和已加载 skills。 |
+| `strictFinalOutputRequested` | 识别“只回复/只输出”等严格最终格式要求，并在本轮模型调用前追加临时 system reminder。 |
 | `toolRepeatGuard.Check` | 按 `tool name + normalized JSON args` 计数；当前超过阈值只记录 warn。 |
 | `toolCollector.Add` | 合并流式 ToolCall 分片；参数 JSON 完整后才可执行。 |
 | `exeToolCall` | 触发工具事件 sink，调用 Eino tool，保留参数和错误提示。 |
-| `addToolResult` | 成功写 `schema.ToolMessage(result, id)`；失败写格式化错误消息。 |
+| `addToolResult` | 成功写 `schema.ToolMessage(result, id)`；失败写格式化错误消息；失败后成功重试会提示最终回答以最新成功结果为准。 |
 
 ## 状态边界
 

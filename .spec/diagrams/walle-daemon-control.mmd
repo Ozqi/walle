@@ -1,15 +1,22 @@
-%% 事实源: .spec/diagrams/walle-architecture-topology.json view_daemon_control
+%% 事实源: .spec/diagrams/walle-architecture-topology.json
 flowchart LR
-  CLI["walle CLI"] -->|spawn if missing| Daemon["walle daemon"]
-  CLI -->|open / ps / attach| Socket["supervisor.sock"]
-  TUI["attached TUI"] <--> Socket
-  Daemon --> Registry["interactive runtime registry"]
-  Registry --> SessionA["DaemonSession\nworkspace A"]
-  Registry --> SessionB["DaemonSession\nworkspace B"]
-  SessionA --> RuntimeA["Runtime A"]
-  SessionB --> RuntimeB["Runtime B"]
-  Daemon --> Agentd["Agentd\ngeneric process table"]
-  Agentd --> Socket
-  Socket -->|route by process id| Registry
-  Agentd -->|RunProcess| RuntimeProc["Runtime process runner"]
-  RuntimeProc --> Output[".walle/reports + worklog"]
+  CLI["walle CLI"] <-->|"默认: Unix Socket + NDJSON"| Unix["supervisor.sock"]
+  TUI["internal/tui"] <-->|"input / stop / detach / events"| Unix
+  Script["脚本 / CI"] -.->|"可选 HTTP JSON"| HTTP["localhost HTTP Gateway"]
+  Browser["Browser / IDE"] -.->|"WebSocket interactive"| WS["WS /v1/runtimes/{id}/attach"]
+  Observer["Dashboard / log view"] -.->|"SSE readonly"| SSE["GET /v1/runtimes/{id}/events"]
+
+  Unix --> Daemon["internal/daemon"]
+  HTTP --> Daemon
+  WS --> Daemon
+  SSE --> Daemon
+
+  Daemon --> Registry["Runtime Registry"]
+  Registry --> SessionA["DaemonSession A"]
+  Registry --> SessionB["DaemonSession B"]
+  SessionA --> RuntimeA["internal/runtime A"]
+  SessionB --> RuntimeB["internal/runtime B"]
+
+  HTTP -.->|"Bearer token / query token"| Token["~/.walle/run/http_token"]
+  WS -.-> Token
+  SSE -.-> Token

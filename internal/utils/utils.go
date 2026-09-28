@@ -257,9 +257,9 @@ func ConfiguredProviders() ([]ConfiguredProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	providers := map[string]bool{}
+	providers := map[string]string{}
 	if supplier, _, err := parseModelRef(getEnvValue(env, "LLM_MODEL", "")); err == nil && supplier != "" {
-		providers[supplier] = true
+		providers[strings.ToLower(supplier)] = supplier
 	}
 	keys := make([]string, 0, len(env)+len(os.Environ()))
 	for key := range env {
@@ -280,10 +280,12 @@ func ConfiguredProviders() ([]ConfiguredProvider, error) {
 		if provider == "" {
 			continue
 		}
-		providers[provider] = true
+		if _, exists := providers[provider]; !exists {
+			providers[provider] = provider
+		}
 	}
 	list := make([]ConfiguredProvider, 0, len(providers))
-	for name := range providers {
+	for _, name := range providers {
 		list = append(list, ConfiguredProvider{Name: name})
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })

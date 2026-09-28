@@ -84,8 +84,9 @@ func listMCPServers() (string, error) {
 }
 
 func addMCPServer(name string, command string, args []string) (string, error) {
-	if name == "" || command == "" {
-		return "", fmt.Errorf("name and command are required")
+	// 复用 MCP 包的 server 配置校验，避免命令层接受运行时无法注册的名称。
+	if err := (mcp.ServerConfig{Name: name, Command: command}).Validate(); err != nil {
+		return "", err
 	}
 	if strings.HasPrefix(name, "mcp.") {
 		return "", fmt.Errorf("name cannot start with 'mcp.'")

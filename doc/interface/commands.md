@@ -1,6 +1,6 @@
 # Slash Commands
 
-> 由 Claude Fable 5 于 2026-08-23 阅读 `internal/commands/*.go`、`internal/tui/commands.go` 与 `internal/runtime/daemon_session.go` 后更新。
+> 当前实现见 `internal/commands/*.go`、`internal/tui/commands.go` 与 `internal/daemon/session.go`。
 > 覆盖范围：当前可用 slash command、调用边界与副作用。
 
 ## 职责

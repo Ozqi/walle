@@ -24,6 +24,7 @@
   <a href="doc/0README.md">完整文档</a>
 </p>
 
+
 ---
 
 `walle` 是一个小而完整的 Agent 运行时。它适合放在真实项目目录里工作：读取上下文、调用工具、修改文件、执行命令，并把过程保存在本地 session 中。
@@ -39,6 +40,10 @@ TUI / CLI ──► daemon ──► Agent Runtime ──► LLM
                               │             ▼
                          工具结果 ◄── Tool Call
 ```
+
+<p align="center">
+  <img src="doc/brand/walle-screenshot.png" alt="walle 运行截图" width="900" />
+</p>
 
 ## 核心能力
 
@@ -149,7 +154,15 @@ walle ps
 walle attach <process-id>
 ```
 
-`walle daemon` 作为用户级 supervisor 托管多个可 attach 的交互 Runtime，并通过本机 Unix Socket 提供控制面。多数情况下不需要手动启动 daemon，直接执行 `walle` 即可。
+`walle daemon` 作为用户级 supervisor 托管多个可 attach 的交互 Runtime，并默认通过本机 Unix Socket 提供控制面。多数情况下直接执行 `walle` 即可。
+
+需要给浏览器、IDE 插件或脚本暴露本机网络接口时，可以显式开启 HTTP Gateway：
+
+```bash
+walle daemon --http --http-addr 127.0.0.1:0
+```
+
+HTTP Gateway 提供 JSON 短请求、WebSocket 交互流和 SSE 只读事件流；访问 token 默认写在 `~/.walle/run/http_token`，不会打印到日志或终端。
 
 ## 常用 TUI 命令
 
@@ -163,6 +176,27 @@ walle attach <process-id>
 | `/mcp <list\|add\|remove\|...>` | 管理 MCP 配置。 |
 | `/compress` | 手动压缩当前上下文。 |
 | `/detach` | 退出 TUI，但保留后台 Agent。 |
+
+## Go SDK
+
+外部 Go 程序可以直接嵌入 walle Runtime：
+
+```go
+import wallert "github.com/Ozqi/walle/runtime"
+
+rt, err := wallert.New(ctx, wallert.Options{ProjectDir: "/path/to/workspace"})
+if err != nil {
+    return err
+}
+defer rt.Close()
+
+result, err := rt.Run(ctx, "总结这个项目", wallert.WithEventHandler(func(event wallert.Event) {
+    // 处理 assistant / thinking / tool / done / error / state 事件
+}))
+_ = result
+```
+
+SDK 会读取 `~/.walle` 配置并启用 walle 内置工具；模型可通过 `Options.ModelRef` 指定。它适合可信本地工作区，不是只读沙箱。详细说明见 [Runtime 文档](doc/runtime/runtime.md)。
 
 ## 扩展能力
 
@@ -179,7 +213,7 @@ Skill 用来补充特定工作流和工具说明，可以放在用户目录或�
 
 ### MCP
 
-`walle` 可以管理并连接 MCP Server，把外部服务注册为 Agent 可调用的工具：
+`walle` 当前提供 MCP 配置管理命令；默认 Runtime 启动不连接 MCP Server。显式接入时，MCP Server 可被注册为 Agent 可调用的 `mcp.<server>.<tool>` 工具：
 
 ```text
 /mcp list
@@ -199,6 +233,7 @@ Skill 用来补充特定工作流和工具说明，可以放在用户目录或�
 
 ```text
 cmd/walle/        CLI 入口
+runtime/          对外 Go SDK
 internal/
 ├── runtime/      daemon 托管的交互 Agent 装配层
 ├── agent/        ReAct 循环与工具调度
@@ -207,7 +242,7 @@ internal/
 ├── context/      上下文与 session
 ├── skill/        Skill 加载
 ├── mcp/          MCP 客户端
-├── agentd/      Agent process 调度与控制面
+├── daemon/      Unix Socket、Runtime registry 与交互会话
 └── tui/          Bubble Tea 客户端
 doc/              设计与模块文档
 prompt/           Runtime 提示词

@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
-	"time"
 
-	"github.com/Ozqi/walle/internal/agentd"
+	"github.com/Ozqi/walle/internal/daemon"
 	"github.com/Ozqi/walle/internal/tui"
 	"github.com/Ozqi/walle/internal/utils"
 	"github.com/spf13/cobra"
@@ -72,34 +68,28 @@ func runAttach(cmd *cobra.Command, args []string) error {
 		if proc.ID != args[0] {
 			continue
 		}
-		if proc.Interactive {
-			configDir, err := utils.GetConfigDir()
-			if err != nil {
-				return err
-			}
-			client, err := agentd.AttachProcess(configDir+"/run", proc.ID)
-			if err != nil {
-				return err
-			}
-			return tui.LaunchAttachedTUI(cmd.Context(), client)
+		configDir, err := utils.GetConfigDir()
+		if err != nil {
+			return err
 		}
-		if proc.WorkLogPath == "" {
-			return fmt.Errorf("process %s has not opened its worklog yet", proc.ID)
+		client, err := daemon.AttachProcess(configDir+"/run", proc.ID)
+		if err != nil {
+			return err
 		}
-		return followFile(cmd.Context(), cmd.OutOrStdout(), proc.WorkLogPath)
+		return tui.LaunchAttachedTUI(cmd.Context(), client)
 	}
 	return fmt.Errorf("running process %q not found", args[0])
 }
 
-func runningProcesses() ([]agentd.ProcessSnapshot, error) {
+func runningProcesses() ([]daemon.ProcessSnapshot, error) {
 	configDir, err := utils.GetConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	return agentd.ListProcesses(configDir + "/run")
+	return daemon.ListProcesses(configDir + "/run")
 }
 
-func processLabel(proc agentd.ProcessSnapshot) string {
+func processLabel(proc daemon.ProcessSnapshot) string {
 	if proc.Name != "" {
 		return proc.Name
 	}
@@ -111,51 +101,4 @@ func emptyDash(value string) string {
 		return "-"
 	}
 	return value
-}
-
-func followFile(ctx context.Context, out io.Writer, path string) error {
-	// 1. 从文件当前位置持续读取新增日志，I/O 错误直接返回调用方。
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("open process worklog %s: %w", path, err)
-	}
-	defer file.Close()
-	buffer := make([]byte, 32*1024)
-	for {
-		n, readErr := file.Read(buffer)
-		if n > 0 {
-			if _, err := out.Write(buffer[:n]); err != nil {
-				return err
-			}
-		}
-		if readErr != nil && readErr != io.EOF {
-			return fmt.Errorf("read process worklog %s: %w", path, readErr)
-		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(200 * time.Millisecond):
-		}
-		processes, err := runningProcesses()
-		if err != nil {
-			return err
-		}
-		running := false
-		for _, proc := range processes {
-			if proc.WorkLogPath == path {
-				running = true
-				break
-			}
-		}
-		if !running {
-			// 2. 进程退出后读尽文件尾部，避免遗漏退出前最后一次写入。
-			for {
-				n, _ := file.Read(buffer)
-				if n == 0 {
-					return nil
-				}
-				_, _ = out.Write(buffer[:n])
-			}
-		}
-	}
 }

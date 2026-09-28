@@ -1,59 +1,60 @@
 {
   "name": "walle architecture topology",
-  "version": "2026-08-26",
-  "generated_by": "Claude Fable 5",
-  "scope": "Facts used by .spec Mermaid diagrams. Keep this small; detailed contracts live in .spec/*.md.",
   "nodes": {
-    "cli": "cmd/walle: root command, daemon command, ps, attach, default TUI start",
-    "tui": "internal/tui: Bubble Tea render/input client",
-    "socket": "~/.walle/run/supervisor.sock: NDJSON open/list/attach/input/stop/detach",
-    "daemon": "walle daemon: user-level supervisor for interactive Runtime processes",
-    "interactive_registry": "daemon-owned registry of workspace interactive Runtime processes",
-    "daemon_session": "internal/runtime.DaemonSession: adapter for one interactive Runtime and its event history",
-    "agentd": "internal/agentd.Agentd: generic process table and scheduler",
-    "runtime": "internal/runtime: composition root; one instance per interactive process or generic process runner",
-    "agent": "internal/agent: ReAct loop and tool execution",
-    "context": "internal/context.Manager: messages, session, compression metadata",
-    "llm": "internal/llm + internal/codex: provider/model adapters",
-    "tools": "internal/tools.Registry: base, skill, context and optional MCP tools",
-    "session_store": "~/.walle/sessions/*.jsonl",
-    "process_output": "<workspace>/.walle/reports and .walle/agents logs"
+    "cli": "cmd/walle: CLI entry, daemon lifecycle, ps and attach",
+    "tui": "internal/tui: Bubble Tea client, renders daemon events",
+    "unix": "~/.walle/run/supervisor.sock: Unix Socket + NDJSON default local transport",
+    "http": "localhost HTTP JSON: list/open/snapshot/input/stop short requests",
+    "ws": "localhost WebSocket JSON: interactive attached stream",
+    "sse": "localhost SSE: readonly event stream fallback",
+    "daemon": "internal/daemon: Runtime registry, control protocol, provider/auth, event fanout",
+    "registry": "internal/daemon.Registry: workspace Runtime table",
+    "session": "internal/daemon.DaemonSession: one attachable interactive Runtime",
+    "runtime": "internal/runtime: Agent composition and execution",
+    "sdk": "runtime: minimal public Go wrapper",
+    "agent": "internal/agent: ReAct loop",
+    "context": "internal/context: messages and session JSONL",
+    "tools": "internal/tools: local tools",
+    "llm": "internal/llm and internal/codex"
   },
-  "implemented_edges": [
-    ["cli", "daemon", "spawn if supervisor socket is missing"],
-    ["cli", "socket", "open / ps / attach"],
-    ["cli", "tui", "launch attached UI"],
-    ["tui", "socket", "input / stop / detach / events"],
-    ["daemon", "interactive_registry", "create or attach workspace interactive processes"],
-    ["interactive_registry", "daemon_session", "one session adapter per Runtime"],
-    ["daemon_session", "runtime", "RunStream and slash commands"],
-    ["daemon", "agentd", "create generic scheduler"],
-    ["agentd", "socket", "serve control protocol"],
-    ["socket", "interactive_registry", "route interactive by process id"],
-    ["agentd", "runtime", "ProcessRunner.RunProcess"],
+  "edges": [
+    ["cli", "unix", "default open/list/attach/input/stop/detach"],
+    ["tui", "unix", "default attached event stream"],
+    ["unix", "daemon", "NDJSON control frames"],
+    ["cli", "http", "optional --http JSON requests"],
+    ["http", "daemon", "token protected REST"],
+    ["ws", "daemon", "token protected interactive stream"],
+    ["sse", "daemon", "token protected readonly events"],
+    ["daemon", "registry", "open/find/list Runtime"],
+    ["registry", "session", "owns attachable sessions"],
+    ["session", "runtime", "submit/stop/run"],
+    ["sdk", "runtime", "in-process execution"],
     ["runtime", "agent", "own"],
     ["runtime", "context", "own"],
-    ["runtime", "llm", "create model"],
     ["runtime", "tools", "register and bind"],
-    ["context", "session_store", "append / replace messages"],
-    ["runtime", "process_output", "write generic process reports and worklogs"]
+    ["runtime", "llm", "create model"]
   ],
-  "entry_invariants": [
-    "default walle creates a new interactive Runtime for the current workspace",
-    "walle -c / --continue is the only default-entry mode that may continue the latest workspace Runtime or latest session",
-    "walle attach <id> attaches an existing process and never creates a Runtime",
-    "daemon is a supervisor and must not be modeled as one fixed interactive Runtime"
-  ],
-  "optional_or_planned": [
-    "mcp.<server>.<tool> only appears after explicit MCP connection and RegisterMCPTools",
-    "terminal.<name>.<action> dynamic tools are planned in .TODO/10_动态终端工具.md",
-    "LM Projection mask/unmask/unpin is planned in .TODO/11_上下文掩盖与LLM投影.md"
-  ],
+  "transports": {
+    "default": "Unix Socket + NDJSON",
+    "optional_http_gateway": {
+      "enable": "walle daemon --http",
+      "routes": [
+        "GET /v1/processes",
+        "POST /v1/runtimes/open",
+        "GET /v1/runtimes/{id}",
+        "POST /v1/runtimes/{id}/input",
+        "POST /v1/runtimes/{id}/stop",
+        "GET /v1/runtimes/{id}/events",
+        "GET /v1/runtimes/{id}/attach"
+      ],
+      "security": "loopback by default, bearer/query token, Origin check"
+    }
+  },
   "forbidden": [
-    "no fixed TaskList, /task, task watcher, or .walle/task.md source of truth",
-    "no daemon --poll or daemon --interactive modes",
-    "internal/agentd must not import Runtime or task/business packages",
-    "TUI must not hold Runtime or Agent pointers in attached mode",
-    "default walle must not silently attach the last interactive Runtime"
+    "no daemon semantics in the public Runtime SDK",
+    "no client connects directly to internal/runtime",
+    "no detach-as-stop",
+    "no non-loopback HTTP listener unless explicitly allowed",
+    "no token/API key/account id in logs or session/report"
   ]
 }

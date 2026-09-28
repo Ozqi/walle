@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Daemon",
+    "output": "/tmp/walle-daemon.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "Clients",
+      "sublabel": "CLI / TUI / browser",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "unix",
+      "type": "messagebus",
+      "label": "Unix NDJSON",
+      "sublabel": "default transport",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "http",
+      "type": "messagebus",
+      "label": "HTTP / WS / SSE",
+      "sublabel": "explicit --http",
+      "pos": [
+        220,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ],
+      "tag": "optional"
+    },
+    {
+      "id": "registry",
+      "type": "database",
+      "label": "Registry",
+      "sublabel": "workspace Runtime table",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "session",
+      "type": "backend",
+      "label": "DaemonSession",
+      "sublabel": "history + subscribers",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime",
+      "sublabel": "Agent runtime",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "security",
+      "type": "security",
+      "label": "HTTP security",
+      "sublabel": "token + origin",
+      "pos": [
+        400,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clients-unix",
+      "from": "clients",
+      "to": "unix",
+      "variant": "emphasis"
+    },
+    {
+      "id": "clients-http",
+      "from": "clients",
+      "to": "http",
+      "variant": "dashed"
+    },
+    {
+      "id": "unix-registry",
+      "from": "unix",
+      "to": "registry"
+    },
+    {
+      "id": "http-registry",
+      "from": "http",
+      "to": "registry",
+      "variant": "dashed"
+    },
+    {
+      "id": "registry-session",
+      "from": "registry",
+      "to": "session"
+    },
+    {
+      "id": "session-runtime",
+      "from": "session",
+      "to": "runtime",
+      "variant": "emphasis"
+    },
+    {
+      "id": "http-security",
+      "from": "http",
+      "to": "security",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Transport split",
+      "items": [
+        "Unix NDJSON is default local path",
+        "HTTP/WS/SSE only with --http",
+        "Both reuse the same Runtime registry"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Safety",
+      "items": [
+        "HTTP requires token checks",
+        "Browser requests need Origin checks",
+        "Daemon owns provider/OAuth interaction"
+      ]
+    }
+  ]
+}

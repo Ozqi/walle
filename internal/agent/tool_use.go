@@ -215,8 +215,9 @@ func (a *Agent) invokeTool(ctx context.Context, t tool.BaseTool, tc schema.ToolC
 }
 
 // addToolResult 将工具执行结果写入消息上下文。
+// 参数：recovered 表示本轮同名工具此前失败过，本次成功需要显式提醒模型以最新结果为准。
 // 执行错误会转成带参数和修正提示的 ToolMessage 继续交给模型；返回 error 仅表示消息写入失败。
-func (a *Agent) addToolResult(messageCtx *agentctx.Context, tc schema.ToolCall, result string, execErr error) error {
+func (a *Agent) addToolResult(messageCtx *agentctx.Context, tc schema.ToolCall, result string, execErr error, recovered bool) error {
 	if execErr != nil {
 		logger.ErrorTag("TOOL", "Failed: %s, err=%v", tc.Function.Name, execErr)
 		a.printToolError(tc.Function.Name, tc.Function.Arguments, execErr)
@@ -228,7 +229,14 @@ func (a *Agent) addToolResult(messageCtx *agentctx.Context, tc schema.ToolCall, 
 	logger.DebugTag("TOOL", "  result: %s", logger.TruncateString(result, 200))
 	a.printToolResult(tc.Function.Name, tc.Function.Arguments, result)
 
+	if recovered {
+		result = formatRecoveredToolResult(tc, result)
+	}
 	return a.ctxManager.AddMessage(messageCtx, schema.ToolMessage(result, tc.ID))
+}
+
+func formatRecoveredToolResult(tc schema.ToolCall, result string) string {
+	return fmt.Sprintf("Tool retry succeeded after a previous %s failure. Latest result:\n%s\nFinal answer must use this latest successful result and must not claim the tool never failed.", tc.Function.Name, result)
 }
 
 func (a *Agent) printToolCall(name string, args string, concurrent bool) {

@@ -8,10 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Ozqi/walle/internal/agent"
-	"github.com/Ozqi/walle/internal/agentd"
 	agentctx "github.com/Ozqi/walle/internal/context"
 	"github.com/Ozqi/walle/internal/llm"
 	"github.com/Ozqi/walle/internal/logger"
@@ -19,7 +17,6 @@ import (
 	"github.com/Ozqi/walle/internal/tools"
 	"github.com/Ozqi/walle/internal/utils"
 	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/schema"
 )
 
 // =============================================================================
@@ -57,14 +54,22 @@ type Runtime struct {
 	modelMu      sync.Mutex      // 串行化 attached 客户端的模型切换
 }
 
-type processReport struct {
-	ProcessID     string
-	WorkLog       string
-	ExitCondition string
-	Response      string
-	Err           error
-	StartedAt     time.Time
-	EndedAt       time.Time
+// Info 是 Runtime 对外可读的运行状态快照，不外泄内部 Agent/Context/Tool 指针。
+type Info struct {
+	SessionID  string
+	PromptDir  string
+	PromptBase string
+	ModelName  string
+	ModelRef   string
+	ProjectDir string
+	Turn       int
+}
+
+// StreamCallbacks 收集单轮 Runtime 执行中的流式输出和工具事件。
+type StreamCallbacks struct {
+	OnToken     func(string)
+	OnReasoning func(string)
+	OnTool      func(toolevent.ToolEvent)
 }
 
 // =============================================================================
@@ -242,6 +247,36 @@ func (r *Runtime) SwitchModel(ctx context.Context, modelRef string) (string, err
 	return r.ModelRef, nil
 }
 
+// Info 返回 Runtime 的稳定状态快照，供 SDK 和 daemon 展示使用。
+func (r *Runtime) Info() Info {
+	if r == nil {
+		return Info{}
+	}
+	turn := 0
+	if r.Agent != nil {
+		turn = r.Agent.CurrentTurn()
+	}
+	return Info{
+		SessionID: r.SessionID, PromptDir: r.PromptDir, PromptBase: r.PromptBase,
+		ModelName: r.ModelName, ModelRef: r.ModelRef, ProjectDir: r.ProjectDir, Turn: turn,
+	}
+}
+
+// RunStream 在当前 Runtime 的消息上下文中执行一轮 Agent，并把工具事件转给调用方。
+func (r *Runtime) RunStream(ctx context.Context, input string, cb StreamCallbacks) (string, error) {
+	if r == nil || r.Agent == nil || r.MessageCtx == nil {
+		return "", fmt.Errorf("runtime is not initialized")
+	}
+	prev := r.Agent.SetToolEventSink(func(event toolevent.ToolEvent) {
+		r.RecordToolEvent(event)
+		if cb.OnTool != nil {
+			cb.OnTool(event)
+		}
+	})
+	defer r.Agent.SetToolEventSink(prev)
+	return r.Agent.RunStream(ctx, r.MessageCtx, input, cb.OnToken, cb.OnReasoning)
+}
+
 func (r *Runtime) handleToolEvent(event toolevent.ToolEvent, processID string) {
 	if r == nil {
 		return
@@ -258,65 +293,6 @@ func bindTools(ctx context.Context, m model.ToolCallingChatModel, registry *tool
 		return nil, err
 	}
 	return m.WithTools(toolInfos)
-}
-
-// =============================================================================
-// Agentd 适配：Runtime 作为 ProcessRunner
-// =============================================================================
-
-// RunProcess 让 Runtime 作为 Agentd 的同步执行 runner。
-// 参数：读取 proc 的身份和 ProcessSpec，写回 WorkLogPath、ReportPath；Project/WorkDir 由外层决定。
-// 调用层级：agentd.Agentd.RunProcess -> Runtime.RunProcess -> Agent.RunStream。
-// 步骤：创建内存 context -> 注入 ProcessSpec.Prompt -> 调用 Agent.RunStream -> 写进程 report/worklog。
-// 边界：process.exited/process.failed 由 Agentd 发布，Runtime 只执行并返回结果。
-func (r *Runtime) RunProcess(ctx context.Context, proc *agentd.AgentProcess) error {
-	if proc == nil {
-		return fmt.Errorf("process is nil")
-	}
-	started := time.Now().UTC()
-	fmt.Fprintf(os.Stdout, "process start: %s report=pending\n", proc.ID)
-	// 1. 为进程创建独立上下文，并把进程 prompt 作为首条 system 消息注入。
-	messageCtx, err := r.CtxManager.CreateContext("")
-	if err != nil {
-		return fmt.Errorf("create process context: %w", err)
-	}
-	if proc.Spec.SystemPrompt != "" {
-		if err := r.CtxManager.AddMessage(messageCtx, &schema.Message{Role: schema.System, Content: proc.Spec.SystemPrompt}); err != nil {
-			return fmt.Errorf("add process system prompt: %w", err)
-		}
-	}
-	// 2. 建立独立 worklog 和工具事件 sink；defer 保证恢复共享 Agent 的旧 sink。
-	dataDir := projectDataDir(r.ProjectDir)
-	workLog := newProcessWorkLog(false, dataDir, proc.ID, started)
-	workLog.Start(proc.ID, proc.Name)
-	proc.SetWorkLogPath(workLog.path)
-	prevSink := r.Agent.SetToolEventSink(func(event toolevent.ToolEvent) {
-		workLog.printToolEvent(event)
-		r.handleToolEvent(event, proc.ID)
-	})
-	defer r.Agent.SetToolEventSink(prevSink)
-	input := fmt.Sprintf(`你正在以 Agentd 进程模式运行。
-
-Exit Condition:
-%s
-
-请在当前进程上下文内完成任务。上下文由 Runtime 独立创建，并按当前 session 策略持久化。`, proc.Spec.ExitCondition)
-	// 3. 执行 Agent，并确保 worklog 记录最终状态。
-	response, runErr := r.Agent.RunStream(ctx, messageCtx, input, workLog.OnToken, workLog.OnReasoning)
-	workLog.End(runErr)
-	// 4. 无论 Agent 成功或失败都写报告；报告写入失败会覆盖本次函数返回错误。
-	report := &processReport{ProcessID: proc.ID, WorkLog: workLog.path, ExitCondition: proc.Spec.ExitCondition, Response: response, Err: runErr, StartedAt: started, EndedAt: time.Now().UTC()}
-	path, writeErr := r.writeProcessReport(report)
-	proc.ReportPath = path
-	if writeErr != nil {
-		return writeErr
-	}
-	status := "completed"
-	if runErr != nil {
-		status = "failed"
-	}
-	fmt.Fprintf(os.Stdout, "process %s: %s report=%s\n", status, proc.ID, proc.ReportPath)
-	return runErr
 }
 
 // Close 关闭进程级日志文件。
@@ -351,23 +327,6 @@ func openMessageCtx(manager *agentctx.Manager, sessionID string, continueLast bo
 	return ctx, manager.GetSessionID(ctx), nil
 }
 
-// =============================================================================
-// 报告和 worklog 辅助：文件命名、渲染、路径清理
-// =============================================================================
-
-func (r *Runtime) writeProcessReport(report *processReport) (string, error) {
-	dir := filepath.Join(projectDataDir(r.ProjectDir), "reports")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create process report dir: %w", err)
-	}
-	ts := time.Now().UTC().Format("20060102-150405.000000000")
-	path := filepath.Join(dir, safeName(report.ProcessID)+"."+ts+".md")
-	if err := os.WriteFile(path, []byte(renderProcessReport(report)), 0o644); err != nil {
-		return "", fmt.Errorf("write process report: %w", err)
-	}
-	return path, nil
-}
-
 func projectDataDir(projectDir string) string {
 	return filepath.Join(projectDir, ".walle")
 }
@@ -383,36 +342,11 @@ func projectRoot(projectDir string) (string, error) {
 	return cwd, nil
 }
 
-func renderProcessReport(report *processReport) string {
-	status := "completed"
-	errText := ""
-	if report.Err != nil {
-		status = "failed"
-		errText = "\n## Error\n\n```text\n" + report.Err.Error() + "\n```\n"
-	}
-	return fmt.Sprintf(`# Agent Process Report
-
-- process: %s
-- status: %s
-- started_at: %s
-- ended_at: %s
-- worklog: %s
-
-## Exit Condition
-
-%s
-
-## Agent Output
-
-%s
-%s`, report.ProcessID, status, report.StartedAt.Format(time.RFC3339), report.EndedAt.Format(time.RFC3339), report.WorkLog, report.ExitCondition, strings.TrimSpace(report.Response), errText)
-}
-
 func safeName(raw string) string {
 	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-", ":", "-", "\t", "-")
 	name := strings.Trim(replacer.Replace(raw), ".-")
 	if name == "" {
-		return "process"
+		return "runtime"
 	}
 	return name
 }

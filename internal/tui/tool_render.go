@@ -97,12 +97,15 @@ func toolEventKey(name string, args string) string {
 
 func formatToolArgsSummary(args string) string {
 	args = strings.TrimSpace(args)
-	if args == "" || args == "{}" {
+	if args == "" || args == "{}" || args == "null" || args == `"null"` {
 		return ""
 	}
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(args), &raw); err != nil {
 		return "(" + truncateMiddle(args, 180) + ")"
+	}
+	if raw == nil {
+		return ""
 	}
 	if value := firstToolArg(raw, "file_path", "path", "command", "pattern"); value != "" {
 		return "(" + truncateMiddle(value, 120) + ")"
@@ -121,7 +124,12 @@ func formatToolArgsSummary(args string) string {
 
 func firstToolArg(raw map[string]interface{}, keys ...string) string {
 	for _, key := range keys {
-		if value := strings.TrimSpace(toolArgValue(raw[key])); value != "" {
+		rawValue, ok := raw[key]
+		if !ok || rawValue == nil {
+			continue
+		}
+		value := strings.TrimSpace(toolArgValue(rawValue))
+		if value != "" && value != "null" {
 			return value
 		}
 	}
@@ -156,9 +164,20 @@ func summarizeToolEventOutput(event toolevent.ToolEvent) string {
 	entry := parseLegacyToolBlock(clean)
 	switch event.Kind {
 	case "result":
-		if tools.DisplayName(event.Name) == "edit" {
+		displayName := tools.DisplayName(event.Name)
+		if displayName == "edit" {
 			if diff, ok := summarizeEditDiff(event.Args); ok {
 				return diff
+			}
+		}
+		if displayName == "read_md" {
+			if summary, ok := summarizeReadMDResult(event.Result); ok {
+				return summary
+			}
+		}
+		if displayName == "write_file" {
+			if summary, ok := summarizeWriteFileResult(event.Result); ok {
+				return summary
 			}
 		}
 		fields := append([]string{}, entry.Result...)
@@ -183,6 +202,56 @@ const (
 	editDiffMaxLines = 3
 	editDiffLineLen  = 120
 )
+
+func summarizeReadMDResult(result string) (string, bool) {
+	var output struct {
+		Action     string `json:"action"`
+		Heading    string `json:"heading"`
+		StartLine  int    `json:"start_line"`
+		EndLine    int    `json:"end_line"`
+		Content    string `json:"content"`
+		TotalLines int    `json:"total_lines"`
+		Headings   []struct {
+			Level int    `json:"level"`
+			Title string `json:"title"`
+			Line  int    `json:"line"`
+		} `json:"headings"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(result)), &output) != nil || output.Action == "" {
+		return "", false
+	}
+
+	lines := []string{fmt.Sprintf("total lines: %d", output.TotalLines)}
+	switch output.Action {
+	case "list_headings":
+		lines = append(lines, fmt.Sprintf("headings: %d", len(output.Headings)))
+		for _, heading := range output.Headings[:min(len(output.Headings), 2)] {
+			lines = append(lines, fmt.Sprintf("L%d H%d %s", heading.Line, heading.Level, heading.Title))
+		}
+	case "read_section":
+		if output.Heading != "" {
+			lines = append(lines, fmt.Sprintf("section: %s (%d-%d)", output.Heading, output.StartLine, output.EndLine))
+		}
+		if content := strings.TrimSpace(output.Content); content != "" {
+			lines = append(lines, compactOutputLines(strings.Split(content, "\n"), 2))
+		}
+	case "replace_section", "delete_section":
+		lines = append(lines, fmt.Sprintf("%s: %s (%d-%d)", output.Action, output.Heading, output.StartLine, output.EndLine))
+	}
+	return compactOutputLines(lines, 4), true
+}
+
+func summarizeWriteFileResult(result string) (string, bool) {
+	var output struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		Bytes   int    `json:"bytes"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(result)), &output) != nil || output.Message == "" {
+		return "", false
+	}
+	return compactOutputLines([]string{fmt.Sprintf("bytes: %d", output.Bytes), output.Message}, 3), true
+}
 
 func summarizeEditDiff(args string) (string, bool) {
 	var input struct {
@@ -253,12 +322,13 @@ func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) strin
 		stateColor = colorError
 	}
 
-	name := fallback(entry.ToolName, "tool")
+	name := cleanToolTitle(fallback(entry.ToolName, "tool"))
 	args := strings.TrimSpace(entry.ToolArgs)
 	title := name
 	if args != "" {
 		title += args
 	}
+	title = clipVisibleLine(cleanToolTitle(title), max(8, width-2))
 	header := lipgloss.NewStyle().Foreground(stateColor).Bold(true).Render(stateIcon) + " " + lipgloss.NewStyle().Foreground(colorWhite).Render(title)
 
 	output := strings.TrimSpace(entry.ToolOutput)
@@ -275,6 +345,14 @@ func (m *AppModel) renderToolHintEntry(entry conversationEntry, width int) strin
 		lines = loggerColorLines(lines, colorResult)
 	}
 	return header + "\n" + indentLines(lines, "  ⎿  ", "     ")
+}
+
+func cleanToolTitle(title string) string {
+	title = strings.TrimSpace(title)
+	for _, suffix := range []string{"(null)", `("null")`} {
+		title = strings.TrimSuffix(title, suffix)
+	}
+	return strings.TrimSpace(title)
 }
 
 func colorEditDiffLines(text string) string {

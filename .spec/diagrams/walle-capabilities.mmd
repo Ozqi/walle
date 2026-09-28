@@ -1,11 +1,11 @@
 %% 事实源: .spec/diagrams/walle-architecture-topology.json view_capabilities
 flowchart LR
   Runtime --> Registry["tools.Registry"]
-  Registry --> Base["base.*\nfile / grep / shell"]
+  Registry --> Base["base.*\n文件 / grep / shell"]
   Registry --> Skill["skill.skill"]
   Registry --> Ctx["context.context"]
-  Registry -. explicit .-> MCP["mcp.<server>.<tool>"]
-  Registry -. planned .-> Terminal["terminal.<name>.<action>"]
-  Commands["slash commands"] --> SkillCmd["/skill"]
+  Registry -. 显式启用 .-> MCP["mcp.<server>.<tool>"]
+  Registry -. 规划中 .-> Terminal["terminal.<name>.<action>"]
+  Commands["slash 命令"] --> SkillCmd["/skill"]
   Commands --> MCPCmd["/mcp"]
   Commands --> Compress["/compress"]

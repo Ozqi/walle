@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Capability",
+    "output": "/tmp/walle-capability.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime",
+      "sublabel": "register tools",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "tools.Registry",
+      "sublabel": "tool list",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "base",
+      "type": "backend",
+      "label": "base.*",
+      "sublabel": "file/search/shell",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "skilltool",
+      "type": "backend",
+      "label": "skill.skill",
+      "sublabel": "skill access",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "ctxtool",
+      "type": "backend",
+      "label": "context.context",
+      "sublabel": "context actions",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP tools",
+      "sublabel": "explicit",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "events",
+      "type": "messagebus",
+      "label": "ToolEvent",
+      "sublabel": "summaries",
+      "pos": [
+        580,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "runtime-registry",
+      "from": "runtime",
+      "to": "registry"
+    },
+    {
+      "id": "registry-base",
+      "from": "registry",
+      "to": "base",
+      "variant": "emphasis"
+    },
+    {
+      "id": "base-events",
+      "from": "base",
+      "to": "events",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Registry",
+      "items": [
+        "Runtime owns its registry",
+        "Context tool registered before WithTools",
+        "MCP is explicit, not startup-blocking"
+      ]
+    }
+  ]
+}

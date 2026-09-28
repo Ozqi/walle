@@ -1,79 +1,43 @@
 # Runtime
 
-> 由 Claude Fable 5 于 2026-08-23 阅读 `internal/runtime/runtime.go`、`internal/runtime/daemon_session.go`、`internal/tools/registry.go` 与 `cmd/walle/main.go` 后更新。
-> 覆盖范围：交互 Runtime 装配、模型切换、daemon session、通用 AgentProcess 执行与持久化边界。
+`internal/runtime` 负责创建和执行一个 Agent：加载配置、session、LLM、Prompt、Skill 和 Tools。它不处理 daemon 协议、provider picker、OAuth、通用 process 或 report/worklog。
 
-## 职责
-
-`internal/runtime` 是 Agent 装配层。它创建配置、session、LLM、Agent、本地工具与 daemon session，也保留 `internal/agentd.ProcessRunner` 所需的通用 process 执行能力。
-
-Runtime 不再内置 TaskList、文件任务入口、task watcher 或 task report/status。
-
-## 关键文件
-
-| 文件 | 作用 |
-| --- | --- |
-| [runtime.go](../../internal/runtime/runtime.go) | `Runtime` 初始化、模型切换、通用 process 执行 |
-| [daemon_session.go](../../internal/runtime/daemon_session.go) | 可 attach 的长驻交互 Agent 与事件回放 |
-| [worklog.go](../../internal/runtime/worklog.go) | 通用 process 工作日志 |
-| [cmd/walle/main.go](../../cmd/walle/main.go) | 默认 TUI 与 daemon 入口 |
-
-## 初始化顺序
+## 调用链
 
 ```text
 runtime.New
-  -> utils.LoadConfigWithOptions
-  -> logger.InitLog
-  -> projectRoot / projectDataDir
-  -> context.NewManager(~/.walle/sessions)
-  -> openMessageCtx
-  -> llm.NewClient
-  -> utils.LoadSystemPromptBase
-  -> agent.NewAgent
-  -> tools.NewRegistry().Init(skillMgr)
-  -> RegisterContextTool
-  -> bindTools(model.WithTools)
+  -> config + session
+  -> LLM + prompt
+  -> Agent
+  -> tools.Registry + context.context
+  -> model.WithTools
+
+Runtime.RunStream -> Agent.RunStream
 ```
 
-启动阶段不启动 MCP stdio server。`/mcp` 只管理配置；远端工具需要显式连接后注册。
+启动阶段不连接 MCP server。
 
-## 入口
+## Go SDK
 
-| 入口 | 行为 |
-| --- | --- |
-| `walle` | 连接 `supervisor.sock`，为当前 workspace 打开新的 interactive Runtime，必要时自动启动 daemon |
-| `walle -c` | 连接当前 workspace 最近 interactive Runtime；没有可复用 Runtime 时继续最近 session 创建 |
-| `walle daemon` | 启动用户级 supervisor；按 open 请求托管多个 interactive Runtime，无 `--poll`、`--interactive` |
-| `walle ps` | 查询 control socket 的 `ProcessSnapshot` |
-| `walle attach <id>` | attach 交互进程，或跟随通用 process worklog |
-| `/model` | 调 `SwitchModel`，只更新当前 Runtime 内存模型 |
-| `/stop` | 取消当前交互执行 |
+外部程序可 import `github.com/Ozqi/walle/runtime`：
 
-## 通用 ProcessRunner
+```go
+rt, err := runtime.New(ctx, runtime.Options{
+    ProjectDir: "/path/to/workspace",
+    ModelRef:   "provider/model",
+})
+if err != nil { return err }
+defer rt.Close()
 
-`Runtime.RunProcess` 接收 `agentd.AgentProcess`，根据 `ProcessSpec` 启动一轮 Agent，写 process worklog/report，并把路径回填到进程对象。它不依赖任务 ID、任务标题或任务状态。
+result, err := rt.Run(ctx, "总结这个项目", runtime.WithEventHandler(func(event runtime.Event) {
+    // assistant / thinking / tool / done / error / state
+}))
+```
 
-`internal/agentd` 的启动事件固定为 `process.start`，payload 为 `ProcessStartPayload{process_spec}`。`AgentProcess` 和 `ProcessSnapshot` 使用 `Name`，不携带 `SourceTask`、`TaskID` 或 `TaskTitle`。
+SDK 只提供 `New`、`Run`、`Info`、`Close` 和事件回调，不包含 daemon session、provider 列表或 OAuth。它启用文件和 shell 工具，不是只读沙箱。
 
-## 输出位置
+## 持久化
 
-| 数据 | 路径 |
-| --- | --- |
-| session | `~/.walle/sessions/*.jsonl` |
-| 用户默认设置 | `~/.walle/settings.json` |
-| 运行进程状态 | `~/.walle/run/supervisor.sock` 的 `ProcessSnapshot` |
-| 通用 process report | `<project>/.walle/reports/<process-id>.<timestamp>.md` |
-| process worklog | `<project>/.walle/agents/<process-id>/logs/*.md` |
-| tool failure stats | `~/.walle/tool-stats/failures.jsonl` 和项目级 `tool-failures.jsonl` |
-
-## Runtime Hooks
-
-项目可选配置 `<project>/.walle/hooks.json`。当前监听：`tool_start`、`tool_end`、`tool_error`。hook 异步执行，默认 5s 超时，失败只写 warning，不阻塞主 Agent。
-
-## 边界
-
-- Runtime 不执行 ReAct 细节；那是 `internal/agent`。
-- Runtime 不渲染 TUI；那是 `internal/tui`。
-- Runtime 不维护 TaskList 或固定任务管理协议。
-- 任务管理未来可由 Skill、MCP 或外置动态工具提供，本次没有新增接口。
-- Runtime 不把 MCP 作为启动阻塞项。
+- session：`~/.walle/sessions/*.jsonl`
+- 用户设置：`~/.walle/settings.json`
+- 工具失败记录：`~/.walle/tool-stats/failures.jsonl` 和项目 `.walle` 目录

@@ -1,28 +1,39 @@
 %% 事实源: .spec/diagrams/walle-architecture-topology.json view_interactive_runtime
 sequenceDiagram
-  participant User
+  participant User as 用户
   participant CLI as cmd/walle
   participant TUI as internal/tui
   participant Socket as supervisor.sock
-  participant Daemon as walle daemon
+  participant HTTP as localhost HTTP Gateway
+  participant Daemon as internal/daemon
   participant Runtime as internal/runtime
 
   User->>CLI: walle
-  CLI->>Socket: open workspace interactive(cwd, continue=false)
-  alt socket missing
-    CLI->>Daemon: spawn "walle daemon"
-    Daemon-->>Socket: supervisor ready
-    CLI->>Socket: retry open
+  CLI->>Socket: open workspace Runtime(cwd, continue=false)
+  alt socket 不存在
+    CLI->>Daemon: 启动 "walle daemon"
+    Daemon-->>Socket: supervisor 就绪
+    CLI->>Socket: 重试 open
   end
-  Socket->>Daemon: create Runtime(ProjectDir=cwd, ContinueLast=false)
-  Daemon-->>Socket: process id
-  Socket-->>CLI: attached + history + ready
+  Socket->>Daemon: 创建 Runtime(ProjectDir=cwd, ContinueLast=false)
+  Daemon-->>Socket: attached + history + ready
   CLI->>TUI: LaunchAttachedTUI
   TUI->>Socket: input / stop / detach
-  Socket->>Runtime: DaemonSession routes request
-  Runtime-->>Socket: assistant / tool / state events
-  Socket-->>TUI: render
+  Socket->>Daemon: 路由到 DaemonSession
+  Daemon->>Runtime: Submit / Stop
+  Runtime-->>Daemon: assistant / tool / state 事件
+  Daemon-->>Socket: live event
+  Socket-->>TUI: 渲染
+
+  opt walle daemon --http
+    User->>HTTP: GET /v1/processes 或 POST /v1/runtimes/open
+    HTTP->>Daemon: list / open / snapshot / input / stop
+    User->>HTTP: WS /v1/runtimes/{id}/attach
+    HTTP-->>User: attached + history + ready + live event
+    User->>HTTP: GET /v1/runtimes/{id}/events
+    HTTP-->>User: SSE readonly event stream
+  end
 
   User->>CLI: walle -c
-  CLI->>Socket: open workspace interactive(cwd, continue=true)
-  Socket->>Daemon: attach latest matching Runtime or create Runtime(ContinueLast=true)
+  CLI->>Socket: open workspace Runtime(cwd, continue=true)
+  Socket->>Daemon: attach 最近匹配 Runtime，或创建 Runtime(ContinueLast=true)

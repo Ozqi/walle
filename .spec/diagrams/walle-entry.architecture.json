@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Entry / TUI",
+    "output": "/tmp/walle-entry.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "sublabel": "terminal command",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "cli",
+      "type": "backend",
+      "label": "cmd/walle",
+      "sublabel": "Cobra entry",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "daemon",
+      "type": "messagebus",
+      "label": "daemon client",
+      "sublabel": "open / attach",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "client",
+      "type": "frontend",
+      "label": "ProcessClient",
+      "sublabel": "event stream",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "tui",
+      "type": "frontend",
+      "label": "Bubble Tea TUI",
+      "sublabel": "input + render",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "local",
+      "type": "frontend",
+      "label": "Local commands",
+      "sublabel": "detach / stop",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-cli",
+      "from": "user",
+      "to": "cli",
+      "variant": "emphasis"
+    },
+    {
+      "id": "cli-daemon",
+      "from": "cli",
+      "to": "daemon"
+    },
+    {
+      "id": "daemon-client",
+      "from": "daemon",
+      "to": "client"
+    },
+    {
+      "id": "client-tui",
+      "from": "client",
+      "to": "tui",
+      "variant": "emphasis"
+    },
+    {
+      "id": "tui-local",
+      "from": "tui",
+      "to": "local",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Entry contract",
+      "items": [
+        "Default walle opens a fresh Runtime",
+        "-c is the only implicit continue path",
+        "attach never creates Runtime"
+      ]
+    }
+  ]
+}

@@ -1,12 +1,14 @@
-%% 事实源: .spec/diagrams/walle-architecture-topology.json view_overall_runtime
+%% 事实源: .spec/diagrams/walle-architecture-topology.json
 flowchart LR
-  CLI["cmd/walle"] -->|start / ps / attach| Socket["supervisor.sock"]
-  CLI --> TUI["internal/tui"]
-  Daemon["walle daemon"] --> Runtime["internal/runtime"]
-  Daemon --> Session["DaemonSession"]
-  Daemon --> Agentd["internal/agentd"]
-  Socket <--> TUI
-  Socket --> Session
+  CLI["cmd/walle"] --> Unix["Unix Socket + NDJSON"]
+  TUI["internal/tui"] <--> Unix
+  HTTP["HTTP JSON"] -. "--http" .-> Daemon["internal/daemon"]
+  WS["WebSocket JSON"] -. "interactive stream" .-> Daemon
+  SSE["SSE readonly"] -. "event stream" .-> Daemon
+  Unix --> Daemon
+  SDK["public runtime"] --> Runtime["internal/runtime"]
+  Daemon --> Registry["Runtime Registry"]
+  Registry --> Session["DaemonSession"]
   Session --> Runtime
   Runtime --> Agent["internal/agent"]
   Runtime --> Context["internal/context"]

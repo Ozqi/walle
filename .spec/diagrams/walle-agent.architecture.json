@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Agent Loop",
+    "output": "/tmp/walle-agent.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "input",
+      "type": "external",
+      "label": "User input",
+      "sublabel": "one turn",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "ctx",
+      "type": "database",
+      "label": "Context",
+      "sublabel": "messages",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "RunStream",
+      "sublabel": "turn loop",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "model",
+      "type": "backend",
+      "label": "Bound LLM",
+      "sublabel": "stream/generate",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "collector",
+      "type": "backend",
+      "label": "Tool collector",
+      "sublabel": "merge chunks",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Tool worker",
+      "sublabel": "serial exec",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "callbacks",
+      "type": "backend",
+      "label": "Callbacks",
+      "sublabel": "usage/debug",
+      "pos": [
+        580,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "input-ctx",
+      "from": "input",
+      "to": "ctx"
+    },
+    {
+      "id": "ctx-agent",
+      "from": "ctx",
+      "to": "agent"
+    },
+    {
+      "id": "agent-model",
+      "from": "agent",
+      "to": "model",
+      "variant": "emphasis"
+    },
+    {
+      "id": "model-collector",
+      "from": "model",
+      "to": "collector"
+    },
+    {
+      "id": "collector-worker",
+      "from": "collector",
+      "to": "worker"
+    },
+    {
+      "id": "model-callbacks",
+      "from": "model",
+      "to": "callbacks",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Turn order",
+      "items": [
+        "User message enters Context first",
+        "Assistant tool-call message precedes tool result",
+        "Tool result returns through Context"
+      ]
+    }
+  ]
+}

@@ -95,6 +95,17 @@ func renderedLineCount(text string) int {
 	return strings.Count(text, "\n") + 1
 }
 
+func (m *AppModel) leaveIntroFocus(stickBottom bool) {
+	if !m.introFocus {
+		return
+	}
+	m.introFocus = false
+	m.autoScroll = stickBottom
+	if stickBottom {
+		m.viewport.GotoBottom()
+	}
+}
+
 // refreshView 重新渲染所有会话条目，并在 auto-scroll 开启时保持贴底。
 func (m *AppModel) refreshView() {
 	m.resize()
@@ -109,6 +120,11 @@ func (m *AppModel) refreshView() {
 	}
 	m.viewText = strings.Join(parts, "\n\n")
 	m.viewport.SetContent(m.viewText)
+	if m.introFocus {
+		m.viewport.GotoTop()
+		m.autoScroll = false
+		return
+	}
 	if stickToBottom {
 		m.viewport.GotoBottom()
 		m.autoScroll = true
@@ -119,20 +135,86 @@ func (m *AppModel) refreshView() {
 func (m *AppModel) renderIntroEntry(width int) string {
 	width = max(24, width)
 	muted := lipgloss.NewStyle().Foreground(colorMuted)
-	lines := []string{muted.Render("预载提示词")}
-	for _, prompt := range fallbackList(m.introInfo.Prompts, []string{"main.md"}) {
-		lines = append(lines, "  • "+lipgloss.NewStyle().Foreground(colorWhite).Render(prompt))
+	strong := lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	promptLine := muted.Render("提示词  ") + lipgloss.NewStyle().Foreground(colorWhite).Render(strings.Join(fallbackList(m.introInfo.Prompts, []string{"main.md"}), " · "))
+	skillLine := muted.Render("Skills  ") + lipgloss.NewStyle().Foreground(colorBlue).Render(introSkillSummary(m.introInfo.Skills))
+	info := []string{
+		strong.Render("walle") + muted.Render("  启动上下文"),
+		promptLine,
+		skillLine,
 	}
-	lines = append(lines, "", muted.Render("预载 Skills"))
-	skills := fallbackList(m.introInfo.Skills, []string{"未发现已加载 Skill"})
-	for i, skill := range skills {
-		if i >= maxHintRows {
-			lines = append(lines, muted.Render(fmt.Sprintf("  • ... 还有 %d 个", len(skills)-i)))
-			break
+
+	icon := strings.Split(renderWallePixelIcon(width, m.introFocus), "\n")
+	if width < 56 {
+		return strings.Join(append(append(icon, ""), info...), "\n")
+	}
+	gap := "   "
+	iconWidth := 0
+	for _, line := range icon {
+		iconWidth = max(iconWidth, lipgloss.Width(line))
+	}
+	infoStart := 1
+	rows := max(len(icon), infoStart+len(info))
+	lines := make([]string, 0, rows)
+	for i := 0; i < rows; i++ {
+		left, right := "", ""
+		if i < len(icon) {
+			left = icon[i]
 		}
-		lines = append(lines, "  • "+wrapVisibleText(skill, max(8, width-4)))
+		if j := i - infoStart; j >= 0 && j < len(info) {
+			right = info[j]
+		}
+		lines = append(lines, left+strings.Repeat(" ", max(0, iconWidth-lipgloss.Width(left)))+gap+right)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func introSkillSummary(skills []string) string {
+	items := fallbackList(skills, []string{"未发现已加载 Skill"})
+	limit := min(len(items), 4)
+	summary := strings.Join(items[:limit], " · ")
+	if len(items) > limit {
+		summary += fmt.Sprintf(" · 还有 %d 个", len(items)-limit)
+	}
+	return summary
+}
+
+func renderWallePixelIcon(width int, animate bool) string {
+	if width < 36 {
+		return renderWallePixelIconCompact(animate)
+	}
+	orange := lipgloss.NewStyle().Foreground(colorOrange)
+	yellow := lipgloss.NewStyle().Foreground(colorYellow)
+	eye := walleEyeFrame(animate, time.Now())
+	return strings.Join([]string{
+		orange.Render(" ╭───╮ ╭───╮"),
+		orange.Render("╱  ") + yellow.Render(eye[0]) + orange.Render(" ╲_╱ ") + yellow.Render(eye[1]) + orange.Render("  ╲"),
+		orange.Render("╲____╱ ╲____╱"),
+		orange.Render("     ║╬║"),
+		orange.Render("╭██╮╭─╨─╮╭██╮"),
+		orange.Render("│██├┤") + yellow.Render("▪▦▪") + orange.Render("├┤██│"),
+		orange.Render("╰██╯╰───╯╰██╯"),
+	}, "\n")
+}
+
+func renderWallePixelIconCompact(animate bool) string {
+	orange := lipgloss.NewStyle().Foreground(colorOrange)
+	yellow := lipgloss.NewStyle().Foreground(colorYellow)
+	eye := walleEyeFrame(animate, time.Now())
+	return strings.Join([]string{
+		orange.Render("╭─╮ ╭─╮"),
+		orange.Render("│") + yellow.Render(eye[0]) + orange.Render("╰─╯") + yellow.Render(eye[1]) + orange.Render("│"),
+		orange.Render("  ╰╥╯"),
+		orange.Render("▟█╰") + yellow.Render("▪") + orange.Render("╯█▙"),
+	}, "\n")
+}
+
+func walleEyeFrame(animate bool, now time.Time) [2]string {
+	if !animate {
+		return [2]string{"●", "●"}
+	}
+	frames := [][2]string{{"●", "●"}, {"◐", "●"}, {"●", "◑"}, {"─", "─"}, {"●", "●"}}
+	return frames[int(now.UnixMilli()/320)%len(frames)]
 }
 
 func fallbackList(items []string, fallbackItems []string) []string {
@@ -148,6 +230,7 @@ func (m *AppModel) snapshot() statusSnapshot {
 	snapshot := statusSnapshot{Runtime: runtimeMeta{
 		Busy:           m.busy,
 		State:          animatedStateLabel(m.busy, m.currentStatus, m.spinnerFrame),
+		Elapsed:        m.runElapsed(),
 		Turn:           m.remoteTurn,
 		ScrollPercent:  int(m.viewport.ScrollPercent() * 100),
 		ToolCallsTotal: m.toolCalls,
@@ -167,6 +250,13 @@ func (m *AppModel) runtimeLocation() (string, gitMeta) {
 		return m.metaCache.Workdir, m.metaCache.Git
 	}
 	return "-", gitMeta{}
+}
+
+func (m *AppModel) runElapsed() time.Duration {
+	if !m.busy || m.runStartedAt.IsZero() {
+		return 0
+	}
+	return time.Since(m.runStartedAt).Truncate(time.Second)
 }
 
 func renderState(state string, busy bool) string {
@@ -292,12 +382,13 @@ func renderIndentedEntry(rendered string) string {
 }
 
 func renderAssistantEntry(content string, width int) string {
+	prefix := lipgloss.NewStyle().Foreground(colorBlue).Bold(true).Render("⏺ ")
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return ""
+		return strings.TrimRight(prefix, " ")
 	}
 	body := wrapVisibleText(content, max(8, width-4))
-	return lipgloss.NewStyle().Foreground(colorBlue).Bold(true).Render("⏺ ") + indentLines(body, "", "  ")
+	return prefix + indentLines(body, "", "  ")
 }
 
 func renderSystemEntry(title string, content string, width int) string {

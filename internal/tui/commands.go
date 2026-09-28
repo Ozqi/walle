@@ -13,11 +13,20 @@ func (m *AppModel) submit() tea.Cmd {
 	if text == "" {
 		return nil
 	}
-	m.lastInput = text
-	m.input.Reset()
 	if text == "/detach" {
+		m.lastInput = text
+		m.rememberInput(text)
+		m.input.Reset()
 		return tea.Quit
 	}
+	if m.remoteDisconnected {
+		m.currentStatus = "disconnected"
+		m.refreshView()
+		return nil
+	}
+	m.lastInput = text
+	m.rememberInput(text)
+	m.input.Reset()
 	if text == "/stop" {
 		if m.remoteStop == nil {
 			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: "/stop is not available"})
@@ -32,8 +41,12 @@ func (m *AppModel) submit() tea.Cmd {
 	isSlash := strings.HasPrefix(text, "/")
 	if m.busy && !isSlash {
 		m.pendingInput = text
+		m.echoUserInput(text)
 		m.currentStatus = "queued"
 		m.refreshView()
+		if m.remoteSubmit != nil {
+			return remoteSubmitCmd(m.remoteSubmit, text)
+		}
 		return nil
 	}
 	if m.remoteSubmit == nil {
@@ -43,8 +56,9 @@ func (m *AppModel) submit() tea.Cmd {
 		return nil
 	}
 	if !isSlash {
-		m.busy = true
-		m.currentStatus = "submitting"
+		m.echoUserInput(text)
+		m.startRun("submitting")
+		m.showAssistantWaiting()
 	} else {
 		m.currentStatus = "command"
 	}

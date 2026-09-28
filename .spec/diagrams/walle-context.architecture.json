@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "walle Context",
+    "output": "/tmp/walle-context.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime",
+      "sublabel": "owns MessageCtx",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "manager",
+      "type": "backend",
+      "label": "Manager",
+      "sublabel": "message API",
+      "pos": [
+        220,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "memory",
+      "type": "database",
+      "label": "Context",
+      "sublabel": "in-memory",
+      "pos": [
+        400,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Session Store",
+      "sublabel": "JSONL",
+      "pos": [
+        580,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "tool",
+      "type": "backend",
+      "label": "context.context",
+      "sublabel": "model tool",
+      "pos": [
+        760,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "compress",
+      "type": "backend",
+      "label": "Compress",
+      "sublabel": "LM/fallback",
+      "pos": [
+        940,
+        260
+      ],
+      "size": [
+        135,
+        62
+      ]
+    },
+    {
+      "id": "meta",
+      "type": "database",
+      "label": "Metadata",
+      "sublabel": "pin/audit",
+      "pos": [
+        400,
+        430
+      ],
+      "size": [
+        135,
+        62
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "runtime-manager",
+      "from": "runtime",
+      "to": "manager"
+    },
+    {
+      "id": "manager-memory",
+      "from": "manager",
+      "to": "memory"
+    },
+    {
+      "id": "memory-store",
+      "from": "memory",
+      "to": "store",
+      "variant": "emphasis"
+    },
+    {
+      "id": "manager-meta",
+      "from": "manager",
+      "to": "meta",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Session choice",
+      "items": [
+        "Default walle creates a new session",
+        "-c alone may continue latest session",
+        "attach keeps target MessageCtx"
+      ]
+    }
+  ]
+}

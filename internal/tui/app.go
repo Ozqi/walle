@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Ozqi/walle/internal/agentd"
+	"github.com/Ozqi/walle/internal/daemon"
 	"github.com/Ozqi/walle/internal/toolevent"
 	"github.com/Ozqi/walle/internal/tools"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -55,6 +55,101 @@ func entryNow(entry conversationEntry) conversationEntry {
 	return entry
 }
 
+func (m *AppModel) echoUserInput(text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	m.entries = append(m.entries, conversationEntry{Role: roleUser, Content: text})
+	m.userEchoes = append(m.userEchoes, text)
+}
+
+func (m *AppModel) consumeUserEcho(text string) bool {
+	text = strings.TrimSpace(text)
+	for i, echoed := range m.userEchoes {
+		if strings.TrimSpace(echoed) != text {
+			continue
+		}
+		m.userEchoes = append(m.userEchoes[:i], m.userEchoes[i+1:]...)
+		return true
+	}
+	return false
+}
+
+func (m *AppModel) rememberInput(text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	if len(m.inputHistory) == 0 || m.inputHistory[len(m.inputHistory)-1] != text {
+		m.inputHistory = append(m.inputHistory, text)
+	}
+	m.historyIndex = -1
+	m.historyDraft = ""
+}
+
+func (m *AppModel) browseInputHistory(delta int) {
+	if len(m.inputHistory) == 0 {
+		return
+	}
+	if m.historyIndex == -1 {
+		m.historyDraft = m.input.Value()
+		if delta < 0 {
+			m.historyIndex = len(m.inputHistory) - 1
+		} else {
+			return
+		}
+	} else {
+		m.historyIndex += delta
+		if m.historyIndex < 0 {
+			m.historyIndex = 0
+		}
+		if m.historyIndex >= len(m.inputHistory) {
+			m.historyIndex = -1
+			m.input.SetValue(m.historyDraft)
+			m.input.CursorEnd()
+			return
+		}
+	}
+	m.input.SetValue(m.inputHistory[m.historyIndex])
+	m.input.CursorEnd()
+}
+
+func (m *AppModel) startRun(status string) {
+	if m.runStartedAt.IsZero() {
+		m.runStartedAt = time.Now()
+		m.runAssistantOutput = false
+	}
+	m.busy = true
+	m.currentStatus = status
+}
+
+func (m *AppModel) stopRun(status string) {
+	m.busy = false
+	m.runStartedAt = time.Time{}
+	m.currentStatus = status
+}
+
+func (m *AppModel) showAssistantWaiting() {
+	if m.currentAssistant >= 0 && m.currentAssistant < len(m.entries) && m.entries[m.currentAssistant].Role == roleAssistant {
+		return
+	}
+	m.entries = append(m.entries, conversationEntry{Role: roleAssistant})
+	m.currentAssistant = len(m.entries) - 1
+}
+
+func (m *AppModel) clearAssistantWaiting() {
+	if m.currentAssistant < 0 || m.currentAssistant >= len(m.entries) {
+		return
+	}
+	entry := m.entries[m.currentAssistant]
+	if entry.Role != roleAssistant || strings.TrimSpace(entry.Content) != "" {
+		return
+	}
+	m.entries = append(m.entries[:m.currentAssistant], m.entries[m.currentAssistant+1:]...)
+	m.currentAssistant = -1
+}
+
 type statusSnapshot struct {
 	Runtime runtimeMeta
 }
@@ -62,6 +157,7 @@ type statusSnapshot struct {
 type runtimeMeta struct {
 	Busy           bool
 	State          string
+	Elapsed        time.Duration
 	Turn           int
 	ScrollPercent  int
 	ToolCallsTotal int
@@ -99,15 +195,18 @@ type AppModel struct {
 	height int
 	busy   bool
 
-	viewport  viewport.Model
-	input     textarea.Model
-	entries   []conversationEntry
-	viewText  string
-	toolCalls int
-	lastTool  string
+	viewport   viewport.Model
+	input      textarea.Model
+	entries    []conversationEntry
+	viewText   string
+	toolCalls  int
+	lastTool   string
+	userEchoes []string // 本地已回显、等待 daemon user event 确认的普通输入。
 
+	runStartedAt       time.Time
 	currentAssistant   int
 	currentStatus      string
+	runAssistantOutput bool // 当前轮是否收到过非空 assistant token；用于识别空响应终止。
 	remoteTurn         int
 	promptTokens       int
 	totalTokens        int
@@ -117,12 +216,16 @@ type AppModel struct {
 	renderPending      bool
 	remoteDisconnected bool
 	lastInput          string
+	inputHistory       []string // 已提交输入历史；只由 ↑/↓ 在输入框内浏览。
+	historyIndex       int      // 当前浏览的历史下标；-1 表示正在编辑临时草稿。
+	historyDraft       string   // 进入历史浏览前的未提交草稿，用 ↓ 回到最新状态。
 	pendingInput       string
 	escPending         bool
 	lastEscAt          time.Time
 	quitPending        bool
 	lastQuitAt         time.Time
 	autoScroll         bool
+	introFocus         bool // 启动期先停在 session 开头，用户按键/滚动后再恢复贴底行为。
 	metaCache          cachedMeta
 	introInfo          introInfo
 	picker             *pickerState
@@ -159,7 +262,7 @@ type toolEventMsg struct {
 	event toolevent.ToolEvent
 }
 
-type remoteEventMsg struct{ event agentd.ProcessEvent }
+type remoteEventMsg struct{ event daemon.ProcessEvent }
 
 type remoteDisconnectedMsg struct{}
 
@@ -224,7 +327,7 @@ var slashCommandHints = []slashCommandHint{
 	{Name: "/skill", Usage: "/skill <list|get|reload>", Desc: "skills"},
 	{Name: "/compress", Usage: "/compress", Desc: "context"},
 	{Name: "/mcp", Usage: "/mcp <list|add|remove|enable|disable>", Desc: "mcp servers"},
-	{Name: "/session", Usage: "/session <new|list|id>", Desc: "sessions"},
+	{Name: "/session", Usage: "/session", Desc: "current session"},
 	{Name: "/stop", Usage: "/stop", Desc: "stop current run"},
 	{Name: "/model", Usage: "/model [name]", Desc: "models from daemon"},
 	{Name: "/provider", Usage: "/provider [name]", Desc: "select and authenticate provider"},
@@ -260,13 +363,15 @@ func NewAppModel(ctx context.Context, modelName string, sessionID string) *AppMo
 		entries:          []conversationEntry{{Role: roleIntro}},
 		currentAssistant: -1,
 		currentStatus:    "idle",
+		historyIndex:     -1,
 		autoScroll:       true,
+		introFocus:       true,
 	}
 }
 
-// Init 返回 Bubble Tea 启动时需要执行的光标闪烁和异步元信息加载命令。
+// Init 返回 Bubble Tea 启动时需要执行的光标闪烁、开屏轻动画和异步元信息加载命令。
 func (m *AppModel) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd(), m.loadIntroCmd())
+	return tea.Batch(textarea.Blink, m.loadRuntimeLocationCmd(), m.loadIntroCmd(), m.queueIntroBlink())
 }
 
 // Update 处理 Bubble Tea 消息并更新 TUI 状态机。
@@ -285,6 +390,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.busy {
 			return m, nil
 		}
+		if strings.TrimSpace(msg.token) != "" {
+			m.runAssistantOutput = true
+		}
 		if m.currentAssistant == -1 || m.currentAssistant >= len(m.entries) || m.entries[m.currentAssistant].Role != roleAssistant {
 			m.entries = append(m.entries, conversationEntry{Role: roleAssistant, Content: msg.token})
 			m.currentAssistant = len(m.entries) - 1
@@ -297,6 +405,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.busy {
 			return m, nil
 		}
+		m.clearAssistantWaiting()
 		if len(m.entries) > 0 && m.entries[len(m.entries)-1].Role == roleThinking {
 			m.entries[len(m.entries)-1].Content += msg.token
 		} else {
@@ -306,22 +415,36 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentStatus = "thinking"
 		return m, tea.Batch(m.queueRender(), m.queueSpinner())
 	case assistantDoneMsg:
-		m.busy = false
+		if m.remoteDisconnected {
+			return m, nil
+		}
+		wasBusy := m.busy
+		hadOutput := m.runAssistantOutput
+		m.clearAssistantWaiting()
+		m.stopRun("done")
+		if wasBusy && !hadOutput {
+			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: "assistant returned empty response"})
+		}
 		m.currentAssistant = -1
-		m.currentStatus = "idle"
 		m.renderPending = false
 		m.refreshView()
 		return m, tea.Batch(m.loadRuntimeLocationCmd(), m.submitPendingInputCmd())
 	case assistantErrorMsg:
-		m.busy = false
+		if m.remoteDisconnected {
+			return m, nil
+		}
+		m.clearAssistantWaiting()
+		m.stopRun("error")
 		m.currentAssistant = -1
-		m.currentStatus = "error"
 		m.renderPending = false
 		m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: "agent error: " + msg.err.Error()})
 		m.refreshView()
 		return m, tea.Batch(m.loadRuntimeLocationCmd(), m.submitPendingInputCmd())
 	case remoteEventMsg:
 		// attached 模式把 daemon 协议事件翻译成本地 TUI 状态，不直接访问 Runtime。
+		if m.remoteDisconnected {
+			return m, nil
+		}
 		event := msg.event
 		if event.Turn > 0 {
 			m.remoteTurn = event.Turn
@@ -332,49 +455,67 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.contextWindow = event.ContextWindow
 		}
 		switch event.Type {
-		case agentd.ProcessEventUser:
-			m.entries = append(m.entries, conversationEntry{Role: roleUser, Content: event.Text})
+		case daemon.ProcessEventUser:
+			if !m.consumeUserEcho(event.Text) {
+				m.entries = append(m.entries, conversationEntry{Role: roleUser, Content: event.Text})
+			}
 			m.refreshView()
 			return m, nil
-		case agentd.ProcessEventState:
-			m.busy = event.Busy
+		case daemon.ProcessEventState:
 			if event.Busy {
-				m.currentStatus = "running"
+				m.startRun("running")
 				m.refreshView()
 				return m, m.queueSpinner()
 			}
-			if m.currentStatus != "error" {
-				m.currentStatus = "idle"
+			if m.currentStatus != "error" && m.currentStatus != "done" && m.currentStatus != "disconnected" {
+				m.stopRun("idle")
+			} else {
+				m.busy = false
+				m.runStartedAt = time.Time{}
 			}
 			m.refreshView()
 			return m, m.submitPendingInputCmd()
-		case agentd.ProcessEventAssistant:
+		case daemon.ProcessEventAssistant:
 			return m.Update(assistantTokenMsg{token: event.Text})
-		case agentd.ProcessEventThinking:
+		case daemon.ProcessEventThinking:
 			return m.Update(assistantThinkingMsg{token: event.Text})
-		case agentd.ProcessEventTool:
+		case daemon.ProcessEventTool:
 			return m.Update(toolEventMsg{event: toolevent.ToolEvent{Kind: event.Kind, Name: event.Name, Args: event.Args, Text: event.Text, Result: event.Result, Error: event.Error, Concurrent: event.Concurrent}})
-		case agentd.ProcessEventSystem:
-			m.busy = false
-			m.currentStatus = "idle"
+		case daemon.ProcessEventSystem:
+			if m.busy && strings.Contains(event.Text, "agent is busy") {
+				m.currentStatus = "running"
+				m.refreshView()
+				return m, nil
+			}
+			if m.busy && !strings.Contains(event.Text, "stopped current run") {
+				m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: event.Text})
+				m.refreshView()
+				return m, nil
+			}
+			m.clearAssistantWaiting()
+			m.stopRun("idle")
 			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: event.Text})
 			m.refreshView()
-			return m, nil
-		case agentd.ProcessEventPicker:
-			m.busy = false
-			m.currentStatus = "select " + event.Kind
+			return m, m.submitPendingInputCmd()
+		case daemon.ProcessEventPicker:
+			if m.busy {
+				m.currentStatus = "select " + event.Kind
+			} else {
+				m.stopRun("select " + event.Kind)
+			}
 			m.picker = &pickerState{Kind: event.Kind, Provider: event.Name, Options: append([]string(nil), event.Options...)}
 			m.refreshView()
 			return m, nil
-		case agentd.ProcessEventModel:
-			m.busy = false
+		case daemon.ProcessEventModel:
+			if !m.busy {
+				m.stopRun("idle")
+			}
 			m.modelName = event.Text
-			m.currentStatus = "idle"
 			m.refreshView()
 			return m, nil
-		case agentd.ProcessEventDone:
+		case daemon.ProcessEventDone:
 			return m.Update(assistantDoneMsg{})
-		case agentd.ProcessEventError:
+		case daemon.ProcessEventError:
 			message := fallback(event.Error, event.Text)
 			return m.Update(assistantErrorMsg{err: fmt.Errorf("%s", message)})
 		}
@@ -384,14 +525,26 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.remoteDisconnected = true
-		m.busy = false
-		m.currentStatus = "disconnected"
+		m.picker = nil
+		m.clearAssistantWaiting()
+		m.currentAssistant = -1
+		m.stopRun("disconnected")
+		m.remoteTurn = 0
+		m.promptTokens = 0
+		m.totalTokens = 0
+		m.contextWindow = 0
+		m.toolCalls = 0
+		m.lastTool = ""
+		m.userEchoes = nil
+		m.escPending = false
+		m.quitPending = false
 		m.remoteSubmit = func(string) error { return fmt.Errorf("daemon disconnected") }
 		m.remoteStop = func() error { return fmt.Errorf("daemon disconnected") }
 		if len(m.entries) == 0 || m.entries[len(m.entries)-1].Content != "daemon disconnected" {
 			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: "daemon disconnected"})
 		}
 		m.renderPending = false
+		m.spinnerPending = false
 		m.refreshView()
 		return m, nil
 	case spinnerTickMsg:
@@ -406,7 +559,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case renderTickMsg:
 		m.renderPending = false
 		m.refreshView()
-		return m, nil
+		return m, m.queueIntroBlink()
 	case locationLoadedMsg:
 		m.metaCache = cachedMeta{Workdir: msg.workdir, Git: msg.git, LoadedAt: time.Now()}
 		m.refreshView()
@@ -416,32 +569,82 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshView()
 		return m, nil
 	case remoteSubmitResultMsg:
+		if m.remoteDisconnected {
+			return m, nil
+		}
 		if msg.err != nil {
-			m.busy = false
-			m.currentStatus = "error"
+			text := strings.TrimSpace(msg.text)
+			if strings.Contains(msg.err.Error(), "agent is busy") {
+				if strings.TrimSpace(m.pendingInput) == text {
+					m.currentStatus = "queued"
+				} else if strings.HasPrefix(text, "/") && m.busy {
+					m.currentStatus = "running"
+				} else {
+					m.currentStatus = "queued"
+				}
+				m.refreshView()
+				return m, nil
+			}
+			if m.busy {
+				if strings.TrimSpace(m.pendingInput) == text {
+					m.currentStatus = "queued"
+				} else {
+					m.currentStatus = "running"
+				}
+				m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: msg.err.Error()})
+				m.refreshView()
+				return m, nil
+			}
+			m.clearAssistantWaiting()
+			m.stopRun("error")
+			m.consumeUserEcho(msg.text)
 			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: msg.err.Error()})
 			m.refreshView()
 			return m, nil
 		}
+		if strings.TrimSpace(m.pendingInput) == strings.TrimSpace(msg.text) {
+			m.pendingInput = ""
+			if !m.busy {
+				m.startRun("submitting queued")
+				m.showAssistantWaiting()
+			}
+			m.refreshView()
+			return m, m.queueSpinner()
+		}
 		if strings.HasPrefix(strings.TrimSpace(msg.text), "/") {
-			m.currentStatus = "idle"
+			if m.busy {
+				m.currentStatus = "running"
+			} else {
+				m.currentStatus = "idle"
+			}
 			m.refreshView()
 		}
 		return m, nil
 	case remoteStopResultMsg:
+		if m.remoteDisconnected {
+			return m, nil
+		}
 		if msg.err != nil {
-			m.currentStatus = "error"
+			m.clearAssistantWaiting()
+			m.stopRun("error")
 			m.entries = append(m.entries, conversationEntry{Role: roleSystem, Content: msg.err.Error()})
 			m.refreshView()
 		}
 		return m, nil
 	case toolEventMsg:
+		if m.remoteDisconnected {
+			return m, nil
+		}
+		m.clearAssistantWaiting()
 		if msg.event.Kind == "call" {
 			m.toolCalls++
 			m.lastTool = fallback(tools.DisplayName(msg.event.Name), msg.event.Name)
 		}
 		m.applyToolEvent(msg.event)
 		m.currentAssistant = -1
+		if msg.event.Kind == "result" && m.busy {
+			m.currentStatus = "waiting"
+		}
 		m.refreshView()
 		if msg.event.Kind == "call" {
 			return m, m.queueSpinner()
@@ -450,6 +653,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// 鼠标滚轮只驱动历史 viewport，不抢输入框焦点。
 		// tea.WithMouseCellMotion 负责把终端滚轮事件送到这里。
+		m.leaveIntroFocus(false)
 		before := m.viewport.YOffset
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
@@ -466,38 +670,63 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "ctrl+c":
+			m.leaveIntroFocus(true)
+			if m.picker != nil {
+				m.picker = nil
+				if m.busy {
+					m.currentStatus = "running"
+				} else {
+					m.currentStatus = "idle"
+				}
+				m.refreshView()
+				return m, nil
+			}
 			if confirm(&m.quitPending, &m.lastQuitAt, quitConfirmDelay) {
 				return m, tea.Quit
 			}
 			m.input.Reset()
-			m.picker = nil
-			m.currentStatus = "input cleared; ctrl+c again to quit"
+			if m.remoteDisconnected {
+				m.currentStatus = "disconnected"
+			} else if m.busy {
+				m.currentStatus = "running"
+			} else {
+				m.currentStatus = "input cleared; ctrl+c again to quit"
+			}
 			m.refreshView()
 			return m, nil
 		case "ctrl+d":
+			m.leaveIntroFocus(true)
 			return m, tea.Quit
 		}
 		if m.picker != nil {
 			// picker 是模态输入；存在时不让普通快捷键和 textarea 继续消费按键。
 			switch msg.String() {
 			case "up", "ctrl+p":
+				m.leaveIntroFocus(false)
 				if m.picker.Cursor > 0 {
 					m.picker.Cursor--
 				}
 				m.refreshView()
 				return m, nil
 			case "down", "ctrl+n":
+				m.leaveIntroFocus(false)
 				if m.picker.Cursor+1 < len(m.picker.Options) {
 					m.picker.Cursor++
 				}
 				m.refreshView()
 				return m, nil
 			case "esc":
+				m.leaveIntroFocus(true)
 				m.picker = nil
-				m.currentStatus = "idle"
+				if m.busy {
+					m.currentStatus = "running"
+				} else {
+					m.currentStatus = "idle"
+				}
 				m.refreshView()
 				return m, nil
 			case "enter":
+				m.leaveIntroFocus(true)
 				if len(m.picker.Options) == 0 || m.remoteSubmit == nil {
 					return m, nil
 				}
@@ -515,11 +744,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "ctrl+u":
+			m.leaveIntroFocus(true)
 			m.input.Reset()
 			m.quitPending = false
 			m.refreshView()
 			return m, nil
 		case "esc":
+			m.leaveIntroFocus(true)
 			if confirm(&m.escPending, &m.lastEscAt, quitConfirmDelay) {
 				return m, tea.Quit
 			}
@@ -527,11 +758,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshView()
 			return m, nil
 		case "enter":
+			m.leaveIntroFocus(true)
 			if msg.Paste {
 				break
 			}
 			return m, m.submit()
 		case "tab":
+			m.leaveIntroFocus(true)
 			text := strings.TrimSpace(m.input.Value())
 			if strings.HasPrefix(text, "/") && !strings.Contains(text, " ") {
 				if matches := slashHintMatches(text); len(matches) == 1 {
@@ -542,38 +775,48 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "pgdown", "ctrl+f":
+			m.leaveIntroFocus(false)
 			m.autoScroll = m.viewport.AtBottom()
 			m.viewport.ViewDown()
 			m.autoScroll = m.viewport.AtBottom()
 			m.refreshView()
 			return m, nil
 		case "pgup", "ctrl+b":
+			m.leaveIntroFocus(false)
 			m.autoScroll = false
 			m.viewport.ViewUp()
 			m.refreshView()
 			return m, nil
-		case "down", "ctrl+n":
+		case "down":
+			m.leaveIntroFocus(true)
+			m.browseInputHistory(1)
+			m.refreshView()
+			return m, nil
+		case "ctrl+n":
+			m.leaveIntroFocus(false)
 			m.viewport.LineDown(1)
 			m.autoScroll = m.viewport.AtBottom()
 			m.refreshView()
 			return m, nil
 		case "up":
-			// 只保留最近一次提交，满足快速重复输入；多级 shell history 暂不引入。
-			if m.lastInput != "" {
-				m.input.SetValue(m.lastInput)
-			}
+			m.leaveIntroFocus(true)
+			m.browseInputHistory(-1)
+			m.refreshView()
 			return m, nil
 		case "ctrl+p":
+			m.leaveIntroFocus(false)
 			m.autoScroll = false
 			m.viewport.LineUp(1)
 			m.refreshView()
 			return m, nil
 		case "end":
+			m.leaveIntroFocus(true)
 			m.viewport.GotoBottom()
 			m.autoScroll = true
 			m.refreshView()
 			return m, nil
 		case "home":
+			m.leaveIntroFocus(false)
 			m.viewport.GotoTop()
 			m.autoScroll = false
 			m.refreshView()
@@ -581,6 +824,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.leaveIntroFocus(true)
+	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	if _, ok := msg.(tea.KeyMsg); ok {
@@ -596,13 +842,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *AppModel) submitPendingInputCmd() tea.Cmd {
-	if m.busy || m.remoteSubmit == nil || strings.TrimSpace(m.pendingInput) == "" {
+	if m.busy || m.remoteDisconnected || m.remoteSubmit == nil || strings.TrimSpace(m.pendingInput) == "" {
 		return nil
 	}
 	text := m.pendingInput
 	m.pendingInput = ""
-	m.busy = true
-	m.currentStatus = "submitting queued"
+	m.startRun("submitting queued")
+	m.showAssistantWaiting()
 	m.refreshView()
 	return tea.Batch(remoteSubmitCmd(m.remoteSubmit, text), m.queueSpinner())
 }
@@ -621,6 +867,14 @@ func (m *AppModel) queueRender() tea.Cmd {
 	}
 	m.renderPending = true
 	return tea.Tick(33*time.Millisecond, func(time.Time) tea.Msg { return renderTickMsg{} })
+}
+
+func (m *AppModel) queueIntroBlink() tea.Cmd {
+	if !m.introFocus || m.renderPending || m.remoteDisconnected {
+		return nil
+	}
+	m.renderPending = true
+	return tea.Tick(320*time.Millisecond, func(time.Time) tea.Msg { return renderTickMsg{} })
 }
 
 func (m *AppModel) loadRuntimeLocationCmd() tea.Cmd {

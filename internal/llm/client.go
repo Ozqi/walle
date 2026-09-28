@@ -136,7 +136,7 @@ func newClaudeModel(ctx context.Context, config *Config) (model.ToolCallingChatM
 	if err != nil {
 		return nil, fmt.Errorf("create claude model: %w", err)
 	}
-	return chatModel, nil
+	return withSafeToolNames(chatModel), nil
 }
 
 func newOpenAIModel(ctx context.Context, config *Config) (model.ToolCallingChatModel, error) {
@@ -150,7 +150,7 @@ func newOpenAIModel(ctx context.Context, config *Config) (model.ToolCallingChatM
 	if err != nil {
 		return nil, fmt.Errorf("create openai model: %w", err)
 	}
-	return chatModel, nil
+	return withSafeToolNames(chatModel), nil
 }
 
 func thinkingConfig(budgetTokens int) *claude.Thinking {

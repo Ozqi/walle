@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Ozqi/walle/internal/agentd"
+	"github.com/Ozqi/walle/internal/daemon"
 	"github.com/Ozqi/walle/internal/utils"
 )
 
 // startInteractiveClient 启动脱离当前终端的 daemon，并等待其 Unix Socket 可接入。
-func startInteractiveClient(ctx context.Context) (*agentd.ProcessClient, error) {
+func startInteractiveClient(ctx context.Context) (*daemon.ProcessClient, error) {
 	// 1. 解析可执行文件和运行目录，优先复用已就绪的交互 daemon。
 	executable, err := os.Executable()
 	if err != nil {
@@ -33,9 +33,9 @@ func startInteractiveClient(ctx context.Context) (*agentd.ProcessClient, error) 
 	if err != nil {
 		return nil, err
 	}
-	if client, err := agentd.OpenProcess(runDir, openReq); err == nil {
+	if client, err := daemon.OpenProcess(runDir, openReq); err == nil {
 		return client, nil
-	} else if !agentd.IsSupervisorUnavailable(err) {
+	} else if !daemon.IsSupervisorUnavailable(err) {
 		return nil, err
 	}
 
@@ -61,48 +61,78 @@ func startInteractiveClient(ctx context.Context) (*agentd.ProcessClient, error) 
 	defer deadline.Stop()
 	// 3. 轮询 open，直到 Socket 就绪并成功创建本次 workspace Runtime。
 	for {
-		client, err := agentd.OpenProcess(runDir, openReq)
+		client, err := daemon.OpenProcess(runDir, openReq)
 		if err == nil {
 			return client, nil
 		}
-		if !agentd.IsSupervisorUnavailable(err) {
+		if !daemon.IsSupervisorUnavailable(err) {
 			return nil, err
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case err := <-exited:
-			return nil, daemonStartError(runDir, fmt.Sprintf("interactive daemon exited before ready: %v", err))
+			return nil, daemonStartError(runDir, openReq, fmt.Sprintf("interactive daemon exited before ready: %v", err), err)
 		case <-deadline.C:
-			return nil, daemonStartError(runDir, "interactive daemon did not become ready")
+			return nil, daemonStartError(runDir, openReq, "interactive daemon did not become ready", nil)
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
 
-func daemonStartError(runDir string, summary string) error {
+func daemonStartError(runDir string, req daemon.OpenRequest, summary string, exitErr error) error {
 	logPath := filepath.Join(runDir, "interactive.log")
-	data, err := os.ReadFile(logPath)
-	if err != nil || len(data) == 0 {
-		return fmt.Errorf("%s; see %s", summary, logPath)
+	diagnostics := []string{
+		fmt.Sprintf("diagnostics: workspace=%s session=%s model=%s debug=%v", fallback(req.Workspace, "-"), fallback(req.SessionID, "-"), fallback(req.ModelRef, "-"), req.Debug),
+		fmt.Sprintf("log: %s", logPath),
 	}
-	text := strings.TrimSpace(string(data))
-	if text == "" {
-		return fmt.Errorf("%s; see %s", summary, logPath)
+	if exitErr != nil {
+		diagnostics = append(diagnostics, fmt.Sprintf("exit: %s", exitErr))
+		if status, ok := exitErr.(*exec.ExitError); ok {
+			diagnostics = append(diagnostics, fmt.Sprintf("signal: %s", status.ProcessState.String()))
+		}
 	}
-	lines := strings.Split(text, "\n")
-	if len(lines) > 8 {
-		lines = lines[len(lines)-8:]
+	if req.SessionID != "" {
+		diagnostics = append(diagnostics, sessionDiagnostic(req.SessionID))
 	}
-	return fmt.Errorf("%s; see %s\n%s", summary, logPath, strings.Join(lines, "\n"))
+	if data, err := os.ReadFile(logPath); err == nil {
+		if text := strings.TrimSpace(string(data)); text != "" {
+			lines := strings.Split(text, "\n")
+			if len(lines) > 8 {
+				lines = lines[len(lines)-8:]
+			}
+			diagnostics = append(diagnostics, "last log lines:", strings.Join(lines, "\n"))
+		}
+	}
+	return fmt.Errorf("%s\n%s", summary, strings.Join(diagnostics, "\n"))
 }
 
-func interactiveOpenRequest() (agentd.OpenRequest, error) {
+func sessionDiagnostic(id string) string {
+	configDir, err := utils.GetConfigDir()
+	if err != nil {
+		return "session: unable to resolve config directory: " + err.Error()
+	}
+	path := filepath.Join(configDir, "sessions", id+".jsonl")
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Sprintf("session: %s (%v)", path, err)
+	}
+	return fmt.Sprintf("session: %s (%d bytes; large histories can raise startup memory)", path, info.Size())
+}
+
+func fallback(value string, fallbackValue string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallbackValue
+	}
+	return value
+}
+
+func interactiveOpenRequest() (daemon.OpenRequest, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return agentd.OpenRequest{}, fmt.Errorf("get workspace: %w", err)
+		return daemon.OpenRequest{}, fmt.Errorf("get workspace: %w", err)
 	}
-	return agentd.OpenRequest{
+	return daemon.OpenRequest{
 		Workspace: cwd, Continue: continueLast, SessionID: sessionID,
 		ModelRef: modelRef, LLMFormat: llmFormat, LLMModel: llmModel,
 		Debug: debugMode, PromptBase: "tui",
